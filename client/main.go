@@ -14,7 +14,13 @@ func main() {
 	msgArg := flag.String("msg", "", "message to be sent")
 	flag.Parse()
 
-	err := common.SendMessage(LocalAddress+":"+*uiPortArg, *msgArg)
+	packet := &common.GossipPacket{
+		Simple:&common.SimpleMessage{
+			Contents:*msgArg,
+		},
+	}
+
+	err := common.SendMessage(LocalAddress+":"+*uiPortArg, packet)
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)

@@ -16,7 +16,7 @@ type GossipPacket struct {
 	Simple *SimpleMessage
 }
 
-func SendMessage(address, message string) error {
+func SendMessage(address string, packet *GossipPacket) error {
 	udpAddr, err := net.ResolveUDPAddr("udp4", address)
 	if err != nil {
 		return errors.New("Cannot resolve gossiper address: " + err.Error())
@@ -25,12 +25,6 @@ func SendMessage(address, message string) error {
 	conn, err := net.DialUDP("udp", nil, udpAddr)
 	if err != nil {
 		return errors.New("Cannot connect to gossiper: " + err.Error())
-	}
-
-	packet := &GossipPacket{
-		Simple: &SimpleMessage{
-			Contents: message,
-		},
 	}
 
 	packetByte, err := protobuf.Encode(packet)
@@ -46,7 +40,7 @@ func SendMessage(address, message string) error {
 	return nil
 }
 
-func BroadcastMessage(hosts []string, message, sender string) error {
+func BroadcastMessage(hosts []string, message *GossipPacket, sender string) error {
 	for _, host := range hosts {
 		if host == sender {
 			continue
