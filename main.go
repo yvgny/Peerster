@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"sync"
 )
 
 const LocalAddress = "127.0.0.1"
@@ -27,5 +28,7 @@ func main() {
 	gossiper.handleClients()
 
 	// Let the server run
-	for{}
+	wg := &sync.WaitGroup{}
+	wg.Add(1)
+	wg.Wait()
 }

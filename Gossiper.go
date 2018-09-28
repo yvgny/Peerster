@@ -39,8 +39,10 @@ func NewGossiper(clientAddress, gossipAddress, name, peers string) (*Gossiper, e
 
 	peersSet := common.NewConcurrentSet()
 
-	for _, addr := range strings.Split(peers, ",") {
-		peersSet.Store(addr)
+	if len(peers) > 0 {
+		for _, addr := range strings.Split(peers, ",") {
+			peersSet.Store(addr)
+		}
 	}
 
 	return &Gossiper{
@@ -52,7 +54,6 @@ func NewGossiper(clientAddress, gossipAddress, name, peers string) (*Gossiper, e
 		peers:         peersSet,
 	}, nil
 }
-
 
 func (g *Gossiper) handleClients() {
 	// Handle clients messages
@@ -73,13 +74,23 @@ func (g *Gossiper) handleClients() {
 			peers := g.peers.Elements()
 			fmt.Printf("CLIENT MESSAGE %s\n", gossipPacket.Simple.Contents)
 			fmt.Println(strings.Join(peers, ","))
+
+			gossipPacket.Simple.OriginalName = g.name
+			gossipPacket.Simple.RelayPeerAddr = g.gossipAddress.String()
+			errorList := common.BroadcastMessage(peers, gossipPacket, nil)
+			if errorList != nil {
+				for _, err := range errorList {
+					fmt.Println(err.Error())
+				}
+			}
 		}
 	}()
+
 	// Handle peers messages
 	go func() {
 		buffer := make([]byte, 4096)
 		for {
-			n, _, err := g.gossipConn.ReadFromUDP(buffer)
+			n, addr, err := g.gossipConn.ReadFromUDP(buffer)
 			if err != nil {
 				fmt.Println(err.Error())
 				continue
@@ -90,11 +101,19 @@ func (g *Gossiper) handleClients() {
 				fmt.Println(err.Error())
 			}
 
+			g.peers.Store(gossipPacket.Simple.RelayPeerAddr)
 			peers := g.peers.Elements()
-			fmt.Printf("SIMPLE MESSAGE origin %s from %s contents %s\n", gossipPacket.Simple.OriginalName, gossipPacket.Simple.RelayPeerAddr,
+			fmt.Printf("SIMPLE MESSAGE origin %s from %s contents %s\n", gossipPacket.Simple.OriginalName, addr,
 				gossipPacket.Simple.Contents)
 			fmt.Println(strings.Join(peers, ","))
+
+			relayAddr := gossipPacket.Simple.RelayPeerAddr
+			gossipPacket.Simple.RelayPeerAddr = g.gossipAddress.String()
+
+			errList := common.BroadcastMessage(peers, gossipPacket, &relayAddr)
+			for _, err := range errList {
+				fmt.Println(err.Error())
+			}
 		}
 	}()
 }
-

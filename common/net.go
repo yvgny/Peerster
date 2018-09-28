@@ -40,16 +40,17 @@ func SendMessage(address string, packet *GossipPacket) error {
 	return nil
 }
 
-func BroadcastMessage(hosts []string, message *GossipPacket, sender string) error {
+func BroadcastMessage(hosts []string, message *GossipPacket, sender *string) []error {
+	errorList := make([]error, 0)
 	for _, host := range hosts {
-		if host == sender {
+		if sender != nil && host == *sender {
 			continue
 		}
 		err := SendMessage(host, message)
 		if err != nil {
-			return err
+			errorList = append(errorList, err)
 		}
 	}
 
-	return nil
+	return errorList
 }
