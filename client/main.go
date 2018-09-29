@@ -20,7 +20,7 @@ func main() {
 		},
 	}
 
-	err := common.SendMessage(LocalAddress+":"+*uiPortArg, packet)
+	err := common.SendMessage(LocalAddress+":"+*uiPortArg, packet, nil)
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)

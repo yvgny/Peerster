@@ -8,7 +8,6 @@ import (
 
 type SimpleMessage struct {
 	OriginalName  string
-	RelayPeerAddr string
 	Contents      string
 }
 
@@ -16,15 +15,17 @@ type GossipPacket struct {
 	Simple *SimpleMessage
 }
 
-func SendMessage(address string, packet *GossipPacket) error {
+func SendMessage(address string, packet *GossipPacket, conn *net.UDPConn) error {
 	udpAddr, err := net.ResolveUDPAddr("udp4", address)
 	if err != nil {
 		return errors.New("Cannot resolve gossiper address: " + err.Error())
 	}
 
-	conn, err := net.DialUDP("udp", nil, udpAddr)
-	if err != nil {
-		return errors.New("Cannot connect to gossiper: " + err.Error())
+	if conn == nil {
+		conn, err = net.ListenUDP("udp", nil)
+		if err != nil {
+			return errors.New("Cannot connect to gossiper: " + err.Error())
+		}
 	}
 
 	packetByte, err := protobuf.Encode(packet)
@@ -32,7 +33,7 @@ func SendMessage(address string, packet *GossipPacket) error {
 		return errors.New("Cannot encode packet: " + err.Error())
 	}
 
-	_, err = conn.Write(packetByte)
+	_, err = conn.WriteToUDP(packetByte, udpAddr)
 	if err != nil {
 		return errors.New("Cannot send message: " + err.Error())
 	}
@@ -40,13 +41,13 @@ func SendMessage(address string, packet *GossipPacket) error {
 	return nil
 }
 
-func BroadcastMessage(hosts []string, message *GossipPacket, sender *string) []error {
+func BroadcastMessage(hosts []string, message *GossipPacket, sender *string, conn *net.UDPConn) []error {
 	errorList := make([]error, 0)
 	for _, host := range hosts {
 		if sender != nil && host == *sender {
 			continue
 		}
-		err := SendMessage(host, message)
+		err := SendMessage(host, message, conn)
 		if err != nil {
 			errorList = append(errorList, err)
 		}

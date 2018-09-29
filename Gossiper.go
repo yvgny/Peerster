@@ -76,8 +76,7 @@ func (g *Gossiper) handleClients() {
 			fmt.Println(strings.Join(peers, ","))
 
 			gossipPacket.Simple.OriginalName = g.name
-			gossipPacket.Simple.RelayPeerAddr = g.gossipAddress.String()
-			errorList := common.BroadcastMessage(peers, gossipPacket, nil)
+			errorList := common.BroadcastMessage(peers, gossipPacket, nil, g.gossipConn)
 			if errorList != nil {
 				for _, err := range errorList {
 					fmt.Println(err.Error())
@@ -101,16 +100,14 @@ func (g *Gossiper) handleClients() {
 				fmt.Println(err.Error())
 			}
 
-			g.peers.Store(gossipPacket.Simple.RelayPeerAddr)
+			g.peers.Store(addr.String())
 			peers := g.peers.Elements()
 			fmt.Printf("SIMPLE MESSAGE origin %s from %s contents %s\n", gossipPacket.Simple.OriginalName, addr,
 				gossipPacket.Simple.Contents)
 			fmt.Println(strings.Join(peers, ","))
 
-			relayAddr := gossipPacket.Simple.RelayPeerAddr
-			gossipPacket.Simple.RelayPeerAddr = g.gossipAddress.String()
-
-			errList := common.BroadcastMessage(peers, gossipPacket, &relayAddr)
+			relayAddr := addr.String()
+			errList := common.BroadcastMessage(peers, gossipPacket, &relayAddr, g.gossipConn)
 			for _, err := range errList {
 				fmt.Println(err.Error())
 			}
