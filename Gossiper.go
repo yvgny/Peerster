@@ -16,9 +16,10 @@ type Gossiper struct {
 	gossipConn    *net.UDPConn
 	name          string
 	peers         *common.ConcurrentSet
+	simple        bool
 }
 
-func NewGossiper(clientAddress, gossipAddress, name, peers string) (*Gossiper, error) {
+func NewGossiper(clientAddress, gossipAddress, name, peers string, simpleBroadcastMode bool) (*Gossiper, error) {
 	cAddress, err := net.ResolveUDPAddr("udp4", clientAddress)
 	if err != nil {
 		return nil, errors.New("Cannot resolve client address " + clientAddress + ": " + err.Error())
@@ -52,6 +53,7 @@ func NewGossiper(clientAddress, gossipAddress, name, peers string) (*Gossiper, e
 		gossipConn:    gConn,
 		name:          name,
 		peers:         peersSet,
+		simple:        simpleBroadcastMode,
 	}, nil
 }
 
@@ -71,15 +73,17 @@ func (g *Gossiper) handleClients() {
 				fmt.Println(err.Error())
 			}
 
-			peers := g.peers.Elements()
-			fmt.Printf("CLIENT MESSAGE %s\n", gossipPacket.Simple.Contents)
-			fmt.Println(strings.Join(peers, ","))
+			if g.simple {
+				peers := g.peers.Elements()
+				fmt.Printf("CLIENT MESSAGE %s\n", gossipPacket.Simple.Contents)
+				fmt.Println(strings.Join(peers, ","))
 
-			gossipPacket.Simple.OriginalName = g.name
-			errorList := common.BroadcastMessage(peers, gossipPacket, nil, g.gossipConn)
-			if errorList != nil {
-				for _, err := range errorList {
-					fmt.Println(err.Error())
+				gossipPacket.Simple.OriginalName = g.name
+				errorList := common.BroadcastMessage(peers, gossipPacket, nil, g.gossipConn)
+				if errorList != nil {
+					for _, err := range errorList {
+						fmt.Println(err.Error())
+					}
 				}
 			}
 		}
@@ -99,17 +103,18 @@ func (g *Gossiper) handleClients() {
 			if err != nil {
 				fmt.Println(err.Error())
 			}
+			if g.simple {
+				g.peers.Store(addr.String())
+				peers := g.peers.Elements()
+				fmt.Printf("SIMPLE MESSAGE origin %s from %s contents %s\n", gossipPacket.Simple.OriginalName, addr,
+					gossipPacket.Simple.Contents)
+				fmt.Println(strings.Join(peers, ","))
 
-			g.peers.Store(addr.String())
-			peers := g.peers.Elements()
-			fmt.Printf("SIMPLE MESSAGE origin %s from %s contents %s\n", gossipPacket.Simple.OriginalName, addr,
-				gossipPacket.Simple.Contents)
-			fmt.Println(strings.Join(peers, ","))
-
-			relayAddr := addr.String()
-			errList := common.BroadcastMessage(peers, gossipPacket, &relayAddr, g.gossipConn)
-			for _, err := range errList {
-				fmt.Println(err.Error())
+				relayAddr := addr.String()
+				errList := common.BroadcastMessage(peers, gossipPacket, &relayAddr, g.gossipConn)
+				for _, err := range errList {
+					fmt.Println(err.Error())
+				}
 			}
 		}
 	}()

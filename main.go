@@ -19,7 +19,7 @@ func main() {
 	flag.Parse()
 	fmt.Printf("UIPort = %s, gossipAddr = %s, name = %s, peers = %s, broadcastEnabled = %t\n", *uiPortArg, *gossipAddressArg, *nameArg, *peersArg, *broadcastModeArg)
 
-	gossiper, err := NewGossiper(LocalAddress+":"+*uiPortArg, *gossipAddressArg, *nameArg, *peersArg)
+	gossiper, err := NewGossiper(LocalAddress+":"+*uiPortArg, *gossipAddressArg, *nameArg, *peersArg, *broadcastModeArg)
 	if err != nil {
 		fmt.Println(err.Error())
 		os.Exit(1)
