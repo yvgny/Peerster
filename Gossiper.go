@@ -71,6 +71,7 @@ func (g *Gossiper) handleClients() {
 			err = protobuf.Decode(buffer[0:n], gossipPacket)
 			if err != nil {
 				fmt.Println(err.Error())
+				continue
 			}
 
 			if g.simple {
@@ -102,6 +103,7 @@ func (g *Gossiper) handleClients() {
 			err = protobuf.Decode(buffer[0:n], gossipPacket)
 			if err != nil {
 				fmt.Println(err.Error())
+				continue
 			}
 			if g.simple {
 				g.peers.Store(addr.String())
