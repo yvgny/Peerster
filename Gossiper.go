@@ -54,7 +54,7 @@ func NewGossiper(clientAddress, gossipAddress, name, peers string, simpleBroadca
 		}
 	}
 
-	return &Gossiper{
+	g := &Gossiper{
 		gossipAddress: gAddress,
 		clientAddress: cAddress,
 		clientConn:    cConn,
@@ -65,7 +65,11 @@ func NewGossiper(clientAddress, gossipAddress, name, peers string, simpleBroadca
 		waitAck:       &syncMap,
 		messages:      &messagesMap,
 		simple:        simpleBroadcastMode,
-	}, nil
+	}
+
+	g.startAntiEntropy(time.Second)
+
+	return g, nil
 }
 
 func (g *Gossiper) handleClients() {
@@ -88,6 +92,7 @@ func (g *Gossiper) handleClients() {
 			// Handle the packet in a new thread to be able to listen on new messages again
 			go func() {
 				if gossipPacket.Rumor != nil {
+					// TODO remove after debugging
 					if gossipPacket.Rumor.Text == "PRINT_MSG" {
 						g.DEBUGprintMessages()
 						return
@@ -183,6 +188,18 @@ func (g *Gossiper) handleClients() {
 	}()
 }
 
+func (g *Gossiper) startAntiEntropy(period time.Duration) {
+	go func() {
+		ticker := time.NewTicker(period)
+		for _ := range ticker.C {
+			randomHost := g.peers.Pick()
+			if err := g.sendStatusPacket(randomHost); err != nil {
+				fmt.Println(err.Error())
+			}
+		}
+	}()
+}
+
 func (g *Gossiper) startMongering(gossipPacket *common.GossipPacket, host *string, lastHost *string) error {
 	var toHost string
 	var lastHostVal string
@@ -195,7 +212,7 @@ func (g *Gossiper) startMongering(gossipPacket *common.GossipPacket, host *strin
 		toHost = *host
 	} else {
 		toHost = lastHostVal
-		for i := 0; i < 5 && toHost == lastHostVal; i += 1 {
+		for i := 0; i < 30 && toHost == lastHostVal; i += 1 {
 			toHost = g.peers.Pick()
 			i += 1
 		}
@@ -256,13 +273,15 @@ func (g *Gossiper) waitForAck(fromAddr string, forMsg *common.GossipPacket, time
 		}
 
 		if common.FlipACoin() {
-			g.startMongering(forMsg, nil, &fromAddr)
+			err := g.startMongering(forMsg, nil, &fromAddr)
+			if err != nil {
+				fmt.Println(err.Error())
+			}
 		}
 	}()
 }
 
 // Update peer using the status packet he sent. If an update was necessary, it will return true
-// TODO when an entry is not here (ok == false) CHECK ALSO IN WAIT ACK !
 func (g *Gossiper) updatePeer(peer string, status *common.StatusPacket) (bool, error) {
 	for _, peerStatus := range status.Want {
 		// Check if peer is up to date, if not send him the new messages
@@ -332,6 +351,7 @@ func (g *Gossiper) isNewValidMessage(message *common.RumorMessage) bool {
 	return message.ID == val.(uint32)
 }
 
+// TODO remove after debugging
 func (g *Gossiper) DEBUGprintMessages() {
 	g.messages.Range(func(key, value interface{}) bool {
 		fmt.Printf("KEY = %s, MESSAGE = \"%s\"\n", key, value)
