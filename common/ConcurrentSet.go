@@ -1,6 +1,7 @@
 package common
 
 import (
+	"math/rand"
 	"strings"
 	"sync"
 )
@@ -17,8 +18,8 @@ func NewConcurrentSet() *ConcurrentSet {
 }
 
 func (cs *ConcurrentSet) Store(key string) {
-	cs.RLock()
-	defer cs.RUnlock()
+	cs.Lock()
+	defer cs.Unlock()
 	cs.internalMap[key] = true
 }
 
@@ -53,4 +54,9 @@ func (cs *ConcurrentSet) Elements() []string {
 		peers = append(peers, key)
 	}
 	return peers
+}
+
+func (cs *ConcurrentSet) Pick() string {
+	elem := cs.Elements()
+	return elem[rand.Intn(len(elem))]
 }

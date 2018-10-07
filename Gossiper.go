@@ -7,6 +7,8 @@ import (
 	"github.com/yvgny/Peerster/common"
 	"net"
 	"strings"
+	"sync"
+	"time"
 )
 
 type Gossiper struct {
@@ -16,6 +18,9 @@ type Gossiper struct {
 	gossipConn    *net.UDPConn
 	name          string
 	peers         *common.ConcurrentSet
+	clocks        *sync.Map
+	waitAck       *sync.Map
+	messages      *sync.Map
 	simple        bool
 }
 
@@ -39,6 +44,9 @@ func NewGossiper(clientAddress, gossipAddress, name, peers string, simpleBroadca
 	}
 
 	peersSet := common.NewConcurrentSet()
+	clocksMap := sync.Map{}
+	syncMap := sync.Map{}
+	messagesMap := sync.Map{}
 
 	if len(peers) > 0 {
 		for _, addr := range strings.Split(peers, ",") {
@@ -53,6 +61,9 @@ func NewGossiper(clientAddress, gossipAddress, name, peers string, simpleBroadca
 		gossipConn:    gConn,
 		name:          name,
 		peers:         peersSet,
+		clocks:        &clocksMap,
+		waitAck:       &syncMap,
+		messages:      &messagesMap,
 		simple:        simpleBroadcastMode,
 	}, nil
 }
@@ -74,19 +85,36 @@ func (g *Gossiper) handleClients() {
 				continue
 			}
 
-			if g.simple {
-				peers := g.peers.Elements()
-				fmt.Printf("CLIENT MESSAGE %s\n", gossipPacket.Simple.Contents)
-				fmt.Println(strings.Join(peers, ","))
-
-				gossipPacket.Simple.OriginalName = g.name
-				errorList := common.BroadcastMessage(peers, gossipPacket, nil, g.gossipConn)
-				if errorList != nil {
-					for _, err := range errorList {
+			// Handle the packet in a new thread to be able to listen on new messages again
+			go func() {
+				if gossipPacket.Rumor != nil {
+					if gossipPacket.Rumor.Text == "PRINT_MSG" {
+						g.DEBUGprintMessages()
+						return
+					}
+					gossipPacket.Rumor.Origin = g.name
+					currentClockInter, _ := g.clocks.LoadOrStore(g.name, uint32(1))
+					currentClock := currentClockInter.(uint32)
+					output := fmt.Sprintf("CLIENT MESSAGE %s\n", gossipPacket.Rumor.Text)
+					fmt.Println(output + g.peersString())
+					gossipPacket.Rumor.ID = currentClock
+					g.clocks.Store(g.name, currentClock+1)
+					g.storeMessage(gossipPacket.Rumor)
+					if err = g.startMongering(gossipPacket, nil, nil); err != nil {
 						fmt.Println(err.Error())
 					}
+				} else if gossipPacket.Simple != nil && g.simple {
+					output := fmt.Sprintf("CLIENT MESSAGE %s\n", gossipPacket.Simple.Contents)
+					fmt.Println(output + g.peersString())
+					gossipPacket.Simple.OriginalName = g.name
+					errorList := common.BroadcastMessage(g.peers.Elements(), gossipPacket, nil, g.gossipConn)
+					if errorList != nil {
+						for _, err := range errorList {
+							fmt.Println(err.Error())
+						}
+					}
 				}
-			}
+			}()
 		}
 	}()
 
@@ -105,19 +133,217 @@ func (g *Gossiper) handleClients() {
 				fmt.Println(err.Error())
 				continue
 			}
-			if g.simple {
-				g.peers.Store(addr.String())
-				peers := g.peers.Elements()
-				fmt.Printf("SIMPLE MESSAGE origin %s from %s contents %s\n", gossipPacket.Simple.OriginalName, addr,
-					gossipPacket.Simple.Contents)
-				fmt.Println(strings.Join(peers, ","))
 
-				relayAddr := addr.String()
-				errList := common.BroadcastMessage(peers, gossipPacket, &relayAddr, g.gossipConn)
-				for _, err := range errList {
-					fmt.Println(err.Error())
+			// Handle the packet in a new thread to be able to listen on new messages again
+			go func() {
+				g.peers.Store(addr.String())
+
+				if gossipPacket.Rumor != nil {
+					output := fmt.Sprintf("RUMOR origin %s from %s ID %d contents %s\n", gossipPacket.Rumor.Origin, addr, gossipPacket.Rumor.ID, gossipPacket.Rumor.Text)
+					fmt.Println(output + g.peersString())
+
+					if g.isNewValidMessage(gossipPacket.Rumor) {
+						g.clocks.Store(gossipPacket.Rumor.Origin, gossipPacket.Rumor.ID+1)
+						g.storeMessage(gossipPacket.Rumor)
+
+						// Send ack
+						g.sendStatusPacket(addr.String())
+
+						if err = g.startMongering(gossipPacket, nil, nil); err != nil {
+							fmt.Println(err.Error())
+						}
+					}
+				} else if gossipPacket.Status != nil {
+					output := fmt.Sprintf("STATUS from %s", addr)
+					for _, stat := range gossipPacket.Status.Want {
+						output += " peer " + stat.Identifier + " nextID " + fmt.Sprint(stat.NextID)
+					}
+					fmt.Println(output + "\n" + g.peersString())
+					if statChan, ok := g.waitAck.Load(addr.String()); ok {
+						*statChan.(*chan *common.StatusPacket) <- gossipPacket.Status
+					} else {
+						_, err := g.updatePeer(addr.String(), gossipPacket.Status)
+						if err != nil {
+							fmt.Println(err.Error())
+						}
+					}
+				} else if gossipPacket.Simple != nil && g.simple {
+					output := fmt.Sprintf("SIMPLE MESSAGE origin %s from %s contents %s\n", gossipPacket.Simple.OriginalName, addr,
+						gossipPacket.Simple.Contents)
+					fmt.Println(output + g.peersString())
+					relayAddr := addr.String()
+					errList := common.BroadcastMessage(g.peers.Elements(), gossipPacket, &relayAddr, g.gossipConn)
+					for _, err := range errList {
+						fmt.Println(err.Error())
+					}
 				}
-			}
+
+			}()
 		}
 	}()
+}
+
+func (g *Gossiper) startMongering(gossipPacket *common.GossipPacket, host *string, lastHost *string) error {
+	var toHost string
+	var lastHostVal string
+	if lastHost != nil {
+		lastHostVal = *lastHost
+	} else {
+		lastHostVal = ""
+	}
+	if host != nil {
+		toHost = *host
+	} else {
+		toHost = lastHostVal
+		for i := 0; i < 5 && toHost == lastHostVal; i += 1 {
+			toHost = g.peers.Pick()
+			i += 1
+		}
+		if toHost == lastHostVal {
+			return errors.New("unable to find a new peer to monger with (last host is " + lastHostVal + ")")
+		}
+	}
+	if lastHost != nil {
+		fmt.Printf("FLIPPED COIN sending rumor to %s\n", toHost)
+	}
+	fmt.Printf("MONGERING with %s\n", toHost)
+	err := common.SendMessage(toHost, gossipPacket, g.gossipConn)
+	if err != nil {
+		return err
+	}
+	g.waitForAck(toHost, gossipPacket, time.Second)
+	return nil
+}
+
+func (g *Gossiper) waitForAck(fromAddr string, forMsg *common.GossipPacket, timeout time.Duration) {
+	ackChan := make(chan *common.StatusPacket)
+
+	// TODO Use only the name/address of the peer to store his counter ?
+	// (it will be reset if a second message is sent in the interval
+	// thus there are risks that the second message ack will be discarded
+	// and the message will be sent again)
+	// -> maybe use slice of chan or better struct
+	// Q:
+	// - IN SYNC quand il est complètement synchro ? (pas de nouveau msg chez lui ou chez nous)
+	g.waitAck.Store(fromAddr, &ackChan)
+	go func() {
+		timer := time.NewTimer(timeout)
+		select {
+		case status := <-ackChan:
+			g.waitAck.Delete(fromAddr)
+
+			wasOutdated, err := g.updatePeer(fromAddr, status)
+			if err != nil {
+				fmt.Println(err.Error())
+			} else if wasOutdated {
+				return
+			}
+
+			// Check if we are up to date by sending our current clocks status
+			for _, peerStatus := range status.Want {
+				if clock, _ := g.clocks.LoadOrStore(peerStatus.Identifier, uint32(1)); clock.(uint32) < peerStatus.NextID {
+					if err := g.sendStatusPacket(fromAddr); err != nil {
+						fmt.Println(err.Error())
+					}
+					return
+				}
+			}
+
+			fmt.Printf("IN SYNC WITH %s\n", fromAddr)
+
+		case <-timer.C:
+			g.waitAck.Delete(fromAddr)
+		}
+
+		if common.FlipACoin() {
+			g.startMongering(forMsg, nil, &fromAddr)
+		}
+	}()
+}
+
+// Update peer using the status packet he sent. If an update was necessary, it will return true
+// TODO when an entry is not here (ok == false) CHECK ALSO IN WAIT ACK !
+func (g *Gossiper) updatePeer(peer string, status *common.StatusPacket) (bool, error) {
+	for _, peerStatus := range status.Want {
+		// Check if peer is up to date, if not send him the new messages
+		if clock, ok := g.clocks.Load(peerStatus.Identifier); ok && clock.(uint32) > peerStatus.NextID {
+			msg, ok := g.getMessage(peerStatus.Identifier, peerStatus.NextID)
+			if !ok {
+				return true, errors.New(fmt.Sprintf("message n°%d from %s is not stored but associated clock is %d", peerStatus.NextID+1, peerStatus.Identifier, clock))
+			}
+			gossipPack := common.GossipPacket{
+				Rumor: msg,
+			}
+			if err := g.startMongering(&gossipPack, &peer, nil); err != nil {
+				return true, err
+			}
+
+			return true, nil
+		}
+	}
+
+	return false, nil
+}
+
+func (g *Gossiper) sendStatusPacket(peer string) error {
+	statuses := make([]common.PeerStatus, 0)
+	g.clocks.Range(func(key, value interface{}) bool {
+		statuses = append(statuses, common.PeerStatus{
+			Identifier: key.(string),
+			NextID:     value.(uint32),
+		})
+		return true
+	})
+
+	packet := &common.GossipPacket{
+		Status: &common.StatusPacket{
+			Want: statuses,
+		},
+	}
+
+	if err := common.SendMessage(peer, packet, g.gossipConn); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (g *Gossiper) storeMessage(message *common.RumorMessage) {
+	g.messages.Store(generateRumorUniqueString(message.Origin, message.ID), message.Text)
+}
+
+func (g *Gossiper) getMessage(origin string, id uint32) (*common.RumorMessage, bool) {
+	val, ok := g.messages.Load(generateRumorUniqueString(origin, id))
+	if ok {
+		msg := common.RumorMessage{
+			ID:     id,
+			Origin: origin,
+			Text:   val.(string),
+		}
+		return &msg, ok
+	}
+
+	return nil, ok
+}
+
+func (g *Gossiper) isNewValidMessage(message *common.RumorMessage) bool {
+	val, _ := g.clocks.LoadOrStore(message.Origin, uint32(1))
+
+	return message.ID == val.(uint32)
+}
+
+func (g *Gossiper) DEBUGprintMessages() {
+	g.messages.Range(func(key, value interface{}) bool {
+		fmt.Printf("KEY = %s, MESSAGE = \"%s\"\n", key, value)
+		return true
+	})
+}
+
+func (g *Gossiper) peersString() string {
+	peers := g.peers.Elements()
+	return "PEERS " + strings.Join(peers, ",")
+}
+
+func generateRumorUniqueString(origin string, id uint32) string {
+	return fmt.Sprint(id) + "@" + origin
 }

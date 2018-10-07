@@ -15,8 +15,8 @@ func main() {
 	flag.Parse()
 
 	packet := &common.GossipPacket{
-		Simple:&common.SimpleMessage{
-			Contents:*msgArg,
+		Rumor: &common.RumorMessage{
+			Text: *msgArg,
 		},
 	}
 
