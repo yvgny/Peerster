@@ -167,7 +167,7 @@ func (g *Gossiper) handleClients() {
 					if statChan, ok := g.waitAck.Load(addr.String()); ok {
 						*statChan.(*chan *common.StatusPacket) <- gossipPacket.Status
 					} else {
-						_, err := g.updatePeer(addr.String(), gossipPacket.Status)
+						_, err := g.syncWithPeer(addr.String(), gossipPacket.Status)
 						if err != nil {
 							fmt.Println(err.Error())
 						}
@@ -191,7 +191,7 @@ func (g *Gossiper) handleClients() {
 func (g *Gossiper) startAntiEntropy(period time.Duration) {
 	go func() {
 		ticker := time.NewTicker(period)
-		for _ := range ticker.C {
+		for range ticker.C {
 			randomHost := g.peers.Pick()
 			if err := g.sendStatusPacket(randomHost); err != nil {
 				fmt.Println(err.Error())
@@ -249,25 +249,12 @@ func (g *Gossiper) waitForAck(fromAddr string, forMsg *common.GossipPacket, time
 		case status := <-ackChan:
 			g.waitAck.Delete(fromAddr)
 
-			wasOutdated, err := g.updatePeer(fromAddr, status)
+			didSync, err := g.syncWithPeer(fromAddr, status)
 			if err != nil {
 				fmt.Println(err.Error())
-			} else if wasOutdated {
+			} else if didSync {
 				return
 			}
-
-			// Check if we are up to date by sending our current clocks status
-			for _, peerStatus := range status.Want {
-				if clock, _ := g.clocks.LoadOrStore(peerStatus.Identifier, uint32(1)); clock.(uint32) < peerStatus.NextID {
-					if err := g.sendStatusPacket(fromAddr); err != nil {
-						fmt.Println(err.Error())
-					}
-					return
-				}
-			}
-
-			fmt.Printf("IN SYNC WITH %s\n", fromAddr)
-
 		case <-timer.C:
 			g.waitAck.Delete(fromAddr)
 		}
@@ -282,7 +269,7 @@ func (g *Gossiper) waitForAck(fromAddr string, forMsg *common.GossipPacket, time
 }
 
 // Update peer using the status packet he sent. If an update was necessary, it will return true
-func (g *Gossiper) updatePeer(peer string, status *common.StatusPacket) (bool, error) {
+func (g *Gossiper) syncWithPeer(peer string, status *common.StatusPacket) (bool, error) {
 	for _, peerStatus := range status.Want {
 		// Check if peer is up to date, if not send him the new messages
 		if clock, ok := g.clocks.Load(peerStatus.Identifier); ok && clock.(uint32) > peerStatus.NextID {
@@ -300,6 +287,16 @@ func (g *Gossiper) updatePeer(peer string, status *common.StatusPacket) (bool, e
 			return true, nil
 		}
 	}
+
+	// Check if we are up to date by sending our current clocks status
+	for _, peerStatus := range status.Want {
+		if clock, _ := g.clocks.LoadOrStore(peerStatus.Identifier, uint32(1)); clock.(uint32) < peerStatus.NextID {
+			err := g.sendStatusPacket(peer)
+			return true, err
+		}
+	}
+
+	fmt.Printf("IN SYNC WITH %s\n", peer)
 
 	return false, nil
 }
