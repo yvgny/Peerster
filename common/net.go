@@ -6,6 +6,8 @@ import (
 	"net"
 )
 
+const LocalAddress = "127.0.0.1"
+
 type SimpleMessage struct {
 	OriginalName string
 	Contents     string

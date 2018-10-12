@@ -56,6 +56,7 @@ func (cs *ConcurrentSet) Elements() []string {
 	return peers
 }
 
+// TODO handle case when empty (and verify other methods)
 func (cs *ConcurrentSet) Pick() string {
 	elem := cs.Elements()
 	return elem[rand.Intn(len(elem))]

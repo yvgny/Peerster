@@ -97,15 +97,8 @@ func (g *Gossiper) handleClients() {
 						g.DEBUGprintMessages()
 						return
 					}
-					gossipPacket.Rumor.Origin = g.name
-					currentClockInter, _ := g.clocks.LoadOrStore(g.name, uint32(1))
-					currentClock := currentClockInter.(uint32)
-					output := fmt.Sprintf("CLIENT MESSAGE %s\n", gossipPacket.Rumor.Text)
-					fmt.Println(output + g.peersString())
-					gossipPacket.Rumor.ID = currentClock
-					g.clocks.Store(g.name, currentClock+1)
-					g.storeMessage(gossipPacket.Rumor)
-					if err = g.startMongering(gossipPacket, nil, nil); err != nil {
+					g.HandleClientMessage(gossipPacket)
+					if err = g.HandleClientMessage(gossipPacket); err != nil {
 						fmt.Println(err.Error())
 					}
 				} else if gossipPacket.Simple != nil && g.simple {
@@ -186,6 +179,23 @@ func (g *Gossiper) handleClients() {
 			}()
 		}
 	}()
+}
+
+func (g *Gossiper) HandleClientMessage(packet *common.GossipPacket) error {
+	packet.Rumor.Origin = g.name
+	currentClockInter, _ := g.clocks.LoadOrStore(g.name, uint32(1))
+	currentClock := currentClockInter.(uint32)
+	output := fmt.Sprintf("CLIENT MESSAGE %s\n", packet.Rumor.Text)
+	fmt.Println(output + g.peersString())
+	packet.Rumor.ID = currentClock
+	g.clocks.Store(g.name, currentClock+1)
+	g.storeMessage(packet.Rumor)
+
+	if err := g.startMongering(packet, nil, nil); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (g *Gossiper) startAntiEntropy(period time.Duration) {
@@ -325,17 +335,13 @@ func (g *Gossiper) sendStatusPacket(peer string) error {
 }
 
 func (g *Gossiper) storeMessage(message *common.RumorMessage) {
-	g.messages.Store(generateRumorUniqueString(message.Origin, message.ID), message.Text)
+	g.messages.Store(generateRumorUniqueString(message.Origin, message.ID), *message)
 }
 
 func (g *Gossiper) getMessage(origin string, id uint32) (*common.RumorMessage, bool) {
 	val, ok := g.messages.Load(generateRumorUniqueString(origin, id))
 	if ok {
-		msg := common.RumorMessage{
-			ID:     id,
-			Origin: origin,
-			Text:   val.(string),
-		}
+		msg := val.(common.RumorMessage)
 		return &msg, ok
 	}
 
