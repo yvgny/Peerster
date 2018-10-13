@@ -264,14 +264,6 @@ func (g *Gossiper) startMongering(gossipPacket *common.GossipPacket, host *strin
 func (g *Gossiper) waitForAck(fromAddr string, forMsg *common.GossipPacket, timeout time.Duration) {
 	ackChan := make(chan *common.StatusPacket)
 
-	// TODO Use only the name/address of the peer to store his counter ?
-	// (it will be reset if a second message is sent in the interval
-	// thus there are risks that the second message ack will be discarded
-	// and the message will be sent again)
-	// -> maybe use slice of chan or better struct
-	// Q:
-	// - IN SYNC quand il est complètement synchro ? (pas de nouveau msg chez lui ou chez nous)
-
 	// we wait for the status that acks this message (so wanted ID will be this ID + 1)
 	UID := generateRumorUniqueString(&fromAddr, forMsg.Rumor.Origin, forMsg.Rumor.ID+1)
 	g.waitAck.Store(UID, &ackChan)
