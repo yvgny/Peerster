@@ -56,8 +56,12 @@ func (cs *ConcurrentSet) Elements() []string {
 	return peers
 }
 
-// TODO handle case when empty (and verify other methods)
-func (cs *ConcurrentSet) Pick() string {
+// pick a random element of the set. returns true if an element
+// is found, else false (if set is empty)
+func (cs *ConcurrentSet) Pick() (string, bool) {
 	elem := cs.Elements()
-	return elem[rand.Intn(len(elem))]
+	if len(elem) == 0 {
+		return "", false
+	}
+	return elem[rand.Intn(len(elem))], true
 }

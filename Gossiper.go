@@ -209,8 +209,10 @@ func (g *Gossiper) startAntiEntropy(period time.Duration) {
 	go func() {
 		ticker := time.NewTicker(period)
 		for range ticker.C {
-			randomHost := g.peers.Pick()
-			if err := g.sendStatusPacket(randomHost); err != nil {
+			randomHost, found := g.peers.Pick()
+			if !found {
+				continue
+			} else if err := g.sendStatusPacket(randomHost); err != nil {
 				fmt.Println(err.Error())
 			}
 		}
@@ -229,8 +231,12 @@ func (g *Gossiper) startMongering(gossipPacket *common.GossipPacket, host *strin
 		toHost = *host
 	} else {
 		toHost = lastHostVal
+		var found bool
 		for i := 0; i < 30 && toHost == lastHostVal; i += 1 {
-			toHost = g.peers.Pick()
+			toHost, found = g.peers.Pick()
+			if !found {
+				toHost = lastHostVal
+			}
 			i += 1
 		}
 		if toHost == lastHostVal {
