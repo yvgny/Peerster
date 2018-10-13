@@ -97,7 +97,6 @@ func (g *Gossiper) handleClients() {
 						g.DEBUGprintMessages()
 						return
 					}
-					g.HandleClientMessage(gossipPacket)
 					if err = g.HandleClientMessage(gossipPacket); err != nil {
 						fmt.Println(err.Error())
 					}
@@ -145,9 +144,17 @@ func (g *Gossiper) handleClients() {
 						g.storeMessage(gossipPacket.Rumor)
 
 						// Send ack
-						g.sendStatusPacket(addr.String())
+						if err = g.sendStatusPacket(addr.String()); err != nil {
+							fmt.Println(err.Error())
+						}
 
 						if err = g.startMongering(gossipPacket, nil, nil); err != nil {
+							fmt.Println(err.Error())
+						}
+					} else {
+						// TODO correct ?
+						// message ID was probably too high : trying to update
+						if err = g.sendStatusPacket(addr.String()); err != nil {
 							fmt.Println(err.Error())
 						}
 					}
@@ -278,7 +285,7 @@ func (g *Gossiper) waitForAck(fromAddr string, forMsg *common.GossipPacket, time
 	}()
 }
 
-// Update peer using the status packet he sent. If an update was necessary, it will return true
+// Update peer using the status packet he sent. If an update was/is necessary, it will return true
 func (g *Gossiper) syncWithPeer(peer string, status *common.StatusPacket) (bool, error) {
 	for _, peerStatus := range status.Want {
 		// Check if peer is up to date, if not send him the new messages
