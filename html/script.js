@@ -1,24 +1,59 @@
 let msgIDs = new Set();
 let peers = new Set();
+let nodes = new Set();
 let PERIOD = 500;
 let messageURL = window.location.origin + "/message";
 let idURL = window.location.origin + "/id";
+let nodeURL = window.location.origin + "/node";
 
 $(document).ready(function () {
     pollNewMessages();
+    pollNewNode();
+
+    // Configure message form
     $("#new-message-form").submit(function (e) {
         e.preventDefault();
         let msg = $("#msg").val();
-        $.post(messageURL, {message: msg}, function () {
+        $.post(messageURL, {Message: msg}, function () {
             // handle succes
             $("#msg").val("")
         })
     });
+    $("#new-node-form").submit(function (e) {
+        e.preventDefault();
+        let ip = $("#ip-form").val();
+        let port = $("#port-form").val();
+        $.post(nodeURL, {IP: ip, Port: port}, function () {
+            // handle succes
+            $("#ip-form").val("");
+            $("#port-form").val("")
+        })
+    });
+
+    // Load ID
     $.getJSON(idURL, function (data) {
-        console.dir(data);
-        //$("#idStr").append(data.id + "yé")
+        $("#idStr").append(`<strong>${data.Id}</strong>`)
     })
 });
+
+function pollNewNode() {
+    $.getJSON(nodeURL, function (data) {
+        data.Peers.forEach(peer => {
+            if (nodes.has(peer)) {
+                return
+            }
+            nodes.add(peer);
+            let address = peer.split(":", 2);
+            $("#peers-table-last-elem").before(`
+                <tr>
+                    <td>${address[0]}</td>
+                    <td>${address[1]}</td>
+                </tr>
+            `)
+        });
+        setTimeout(pollNewNode, PERIOD);
+    })
+}
 
 function pollNewMessages() {
     $.getJSON(messageURL, function (data) {
@@ -27,7 +62,7 @@ function pollNewMessages() {
         }).forEach(msg => {
             if (!msgIDs.has(generateUniqueID(msg))) {
                 if (!peers.has(msg.Origin)) {
-                    addPeer(msg.Origin);
+                    addPeerPanel(msg.Origin);
                 }
                 addMessage(msg);
             }
@@ -43,8 +78,11 @@ function generateUniqueID(msg) {
 function addMessage(msg) {
     msgIDs.add(generateUniqueID(msg));
     let peerID = msg.Origin.replace(/ /g, "_");
+    $("#no-message-alert").fadeOut("fast", function () {
+        $(this).remove()
+    });
     $(`#${peerID}`).prepend(`
-        <div class="card">
+        <div class="card m-2">
             <div class="card-body">
                 <h4 class="card-title">${"#" + msg.ID}</h4>
                     <p class="card-text">${msg.Text}</p>
@@ -53,7 +91,7 @@ function addMessage(msg) {
     `)
 }
 
-function addPeer(peer) {
+function addPeerPanel(peer) {
     let first = peers.size === 0 ? 'in active show' : '';
     peers.add(peer);
     let peerID = peer.replace(/ /g, "_");

@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"github.com/gorilla/mux"
 	"github.com/yvgny/Peerster/common"
 	"net/http"
@@ -15,22 +16,25 @@ type WebServer struct {
 }
 
 type Message struct {
-	message string
+	Message string
 }
 
 type ServerInfo struct {
-	id      string
-	address string
+	Id      string
+	Address string
+}
+type Peers struct {
+	Peers []string
 }
 
 func NewWebServer(g *Gossiper) *WebServer {
 
 	r := mux.NewRouter()
-	// r.PathPrefix("/static/").Handler(http.StripPrefix("/static/", http.FileServer(http.Dir("html/static/"))))
 	r.HandleFunc("/message", g.getMessagesHandler).Methods("GET")
 	r.HandleFunc("/message", g.postMessageHandler).Methods("POST")
-	r.HandleFunc("/node", g.nodeHandler)
-	r.HandleFunc("/id", g.idHandler)
+	r.HandleFunc("/node", g.getNodesHandler).Methods("GET")
+	r.HandleFunc("/node", g.addNodeHandler).Methods("POST")
+	r.HandleFunc("/id", g.idHandler).Methods("GET")
 	r.PathPrefix("/").Handler(http.StripPrefix("/", http.FileServer(http.Dir("html/"))))
 
 	server := &http.Server{
@@ -56,29 +60,68 @@ func (ws *WebServer) StartWebServer() {
 func (g *Gossiper) idHandler(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Content-Type", "application/json")
 	msg := ServerInfo{
-		id:      g.name,
-		address: g.gossipAddress.String(),
+		Id:      g.name,
+		Address: g.gossipAddress.String(),
 	}
 	marshal, err := json.Marshal(msg)
 	if err == nil {
-		writer.Write(marshal)
+		_, err := writer.Write(marshal)
+		if err != nil {
+			writeErrorToHTTP(writer, err)
+			fmt.Println(err.Error())
+		}
+	} else {
+		writeErrorToHTTP(writer, err)
+		fmt.Println(err.Error())
 	}
 }
 
-func (g *Gossiper) nodeHandler(writer http.ResponseWriter, request *http.Request) {
+func (g *Gossiper) getNodesHandler(writer http.ResponseWriter, request *http.Request) {
+	writer.Header().Set("Content-Type", "application/json")
 
+	msg := Peers{
+		Peers: g.peers.Elements(),
+	}
+
+	bytes, err := json.Marshal(msg)
+	if err == nil {
+		_, err := writer.Write(bytes)
+		if err != nil {
+			writeErrorToHTTP(writer, err)
+			fmt.Println(err.Error())
+		}
+	} else {
+		writeErrorToHTTP(writer, err)
+		fmt.Println(err.Error())
+	}
+}
+
+func (g *Gossiper) addNodeHandler(writer http.ResponseWriter, request *http.Request) {
+	request.ParseForm()
+	nodeIP := request.Form.Get("IP")
+	port := request.Form.Get("Port")
+
+	err := g.AddPeer(nodeIP + ":" + port)
+	if err != nil {
+		fmt.Println(err.Error())
+		http.Error(writer, err.Error(), 500)
+	}
 }
 
 func (g *Gossiper) postMessageHandler(writer http.ResponseWriter, request *http.Request) {
 	request.ParseForm()
-	messsage := request.Form.Get("message")
+	messsage := request.Form.Get("Message")
 	rumor := common.RumorMessage{
 		Text: messsage,
 	}
 	gossip := common.GossipPacket{
 		Rumor: &rumor,
 	}
-	g.HandleClientMessage(&gossip)
+	err := g.HandleClientMessage(&gossip)
+	if err != nil {
+		writeErrorToHTTP(writer, err)
+		fmt.Println(err.Error())
+	}
 }
 
 func (g *Gossiper) getMessagesHandler(writer http.ResponseWriter, request *http.Request) {
@@ -93,6 +136,16 @@ func (g *Gossiper) getMessagesHandler(writer http.ResponseWriter, request *http.
 
 	bytes, err := json.Marshal(array)
 	if err == nil {
-		writer.Write(bytes)
+		_, err := writer.Write(bytes)
+		if err != nil {
+			writeErrorToHTTP(writer, err)
+		}
+	} else {
+		fmt.Println(err.Error())
+		writeErrorToHTTP(writer, err)
 	}
+}
+
+func writeErrorToHTTP(writer http.ResponseWriter, err error) {
+	http.Error(writer, err.Error(), 500)
 }

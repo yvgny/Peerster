@@ -147,8 +147,7 @@ func (g *Gossiper) handleClients() {
 							fmt.Println(err.Error())
 						}
 					} else {
-						// TODO correct ?
-						// message ID was probably too high : trying to update
+						// Message ID was probably too high : trying to update
 						if err = g.sendStatusPacket(addr.String()); err != nil {
 							fmt.Println(err.Error())
 						}
@@ -211,6 +210,16 @@ func (g *Gossiper) HandleClientMessage(packet *common.GossipPacket) error {
 	return nil
 }
 
+func (g *Gossiper) AddPeer(peer string) error {
+	addr, err := net.ResolveUDPAddr("udp4", peer)
+	if err != nil {
+		return err
+	}
+
+	g.peers.Store(addr.String())
+	return nil
+}
+
 func (g *Gossiper) startAntiEntropy(period time.Duration) {
 	go func() {
 		ticker := time.NewTicker(period)
@@ -264,7 +273,7 @@ func (g *Gossiper) startMongering(gossipPacket *common.GossipPacket, host *strin
 func (g *Gossiper) waitForAck(fromAddr string, forMsg *common.GossipPacket, timeout time.Duration) {
 	ackChan := make(chan *common.StatusPacket)
 
-	// we wait for the status that acks this message (so wanted ID will be this ID + 1)
+	// we wait for the status that acks this Message (so wanted ID will be this ID + 1)
 	UID := generateRumorUniqueString(&fromAddr, forMsg.Rumor.Origin, forMsg.Rumor.ID+1)
 	g.waitAck.Store(UID, &ackChan)
 	go func() {

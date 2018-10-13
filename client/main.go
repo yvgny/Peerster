@@ -10,7 +10,6 @@ import (
 func main() {
 	uiPortArg := flag.String("UIPort", "8080", "port for the UI client")
 	msgArg := flag.String("msg", "", "message to be sent")
-	// TODO est-ce permis de rajouter un argument au CLI ?
 
 	flag.Parse()
 
