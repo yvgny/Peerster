@@ -13,55 +13,57 @@
     <title>Gossiper Web Interface</title>
 </head>
 <body>
-<div class="row-2">
-
+<div class="container-fluid">
+    <div class="row-2">
+    </div>
+    <div class="row">
+        <div class="col-2">
+        </div>
+        <div class="col mt-2">
+            <h3>Peers</h3>
+            <table class="table table-striped table-bordered table-hover">
+                <thead>
+                <tr>
+                    <th>Address</th>
+                    <th>Port</th>
+                </tr>
+                </thead>
+                <tbody id="peers-table">
+                <tr id="peers-table-last-elem">
+                    <form id="new-node-form">
+                        <td><input type="text" placeholder="127.0.0.1" class="form-control" id="ip-form"></td>
+                        <td class="inline-content">
+                            <input type="text" placeholder="5000" class="form-control" id="port-form">
+                            <button type="submit" class="btn btn-primary ml-2">Add</button>
+                        </td>
+                    </form>
+                </tr>
+                </tbody>
+            </table>
+        </div>
+        <div class="col mt-2">
+            <h3>Messages</h3>
+            <div class="alert alert-info mt-2" id="idStr">
+                Your ID is :
+            </div>
+            <div class="alert alert-warning alert-dismissible fade show" id="no-message-alert">
+                <button type="button" class="close align-middle" data-dismiss="alert">&times;</button>
+                <strong>Warning!</strong> There isn't any messages for the moment ! Please come back later or send a new
+                message !
+            </div>
+            <ul class="nav nav-tabs" id="peers-tab">
+            </ul>
+            <div class="tab-content" id="peers-content">
+            </div>
+            <form class="inline-content" id="new-message-form">
+                <input type="text" placeholder="Your message" class="form-control mb-2 mr-sm-2" id="msg">
+                <button type="submit" class="btn btn-primary mb-2">Send</button>
+            </form>
+        </div>
+        <div class="col-2">
+        </div>
+    </div>
 </div>
-<div class="row">
-    <div class="col-2">
-    </div>
-    <div class="col mt-2">
-        <h3>Peers</h3>
-        <table class="table table-striped table-bordered table-hover">
-            <thead>
-            <tr>
-                <th>Address</th>
-                <th>Port</th>
-            </tr>
-            </thead>
-            <tbody id="peers-table">
-            <tr id="peers-table-last-elem">
-                <form id="new-node-form">
-                <td><input type="text" placeholder="127.0.0.1" class="form-control" id="ip-form"></td>
-                <td class="inline-content">
-                    <input type="text" placeholder="5000" class="form-control" id="port-form">
-                    <button type="submit" class="btn btn-primary ml-2">Add</button>
-                </td>
-                </form>
-            </tr>
-            </tbody>
-        </table>
-    </div>
-    <div class="col mt-2">
-        <h3>Messages</h3>
-        <div class="alert alert-info mt-2" id="idStr">
-            Your ID is :
-        </div>
-        <div class="alert alert-warning alert-dismissible fade show" id="no-message-alert">
-            <button type="button" class="close align-middle" data-dismiss="alert">&times;</button>
-            <strong>Warning!</strong> There isn't any messages for the moment ! Please come back later or send a new message !
-        </div>
-        <ul class="nav nav-tabs" id="peers-tab">
-        </ul>
-        <div class="tab-content" id="peers-content">
-        </div>
-        <form class="inline-content" id="new-message-form">
-            <input type="text" placeholder="Your message" class="form-control mb-2 mr-sm-2" id="msg">
-            <button type="submit" class="btn btn-primary mb-2">Send</button>
-        </form>
-    </div>
-    <div class="col-2">
-    </div>
-
 <script src="https://code.jquery.com/jquery-3.3.1.min.js"
         integrity="sha256-FgpCb/KJQlLNfOu91ta32o/NMZxltwRo8QtmkMRdAu8="
         crossorigin="anonymous"></script>
