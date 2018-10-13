@@ -92,11 +92,6 @@ func (g *Gossiper) handleClients() {
 			// Handle the packet in a new thread to be able to listen on new messages again
 			go func() {
 				if gossipPacket.Rumor != nil {
-					// TODO remove after debugging
-					if gossipPacket.Rumor.Text == "PRINT_MSG" {
-						g.DEBUGprintMessages()
-						return
-					}
 					if err = g.HandleClientMessage(gossipPacket); err != nil {
 						fmt.Println(err.Error())
 					}
@@ -365,14 +360,6 @@ func (g *Gossiper) isNewValidMessage(message *common.RumorMessage) bool {
 	val, _ := g.clocks.LoadOrStore(message.Origin, uint32(1))
 
 	return message.ID == val.(uint32)
-}
-
-// TODO remove after debugging
-func (g *Gossiper) DEBUGprintMessages() {
-	g.messages.Range(func(key, value interface{}) bool {
-		fmt.Printf("KEY = %s, MESSAGE = \"%s\"\n", key, value)
-		return true
-	})
 }
 
 func (g *Gossiper) peersString() string {
