@@ -155,12 +155,23 @@ func (g *Gossiper) handleClients() {
 					}
 				} else if gossipPacket.Status != nil {
 					output := fmt.Sprintf("STATUS from %s", addr)
+					ackWaiting := false
+					addrString := addr.String()
+					var ackChan *chan *common.StatusPacket
 					for _, stat := range gossipPacket.Status.Want {
+						// find if this is an acknowledgment
+						value, ok := g.waitAck.Load(generateRumorUniqueString(&addrString, stat.Identifier, stat.NextID))
+						if ok {
+							ackWaiting = true
+							ackChan = value.(*chan *common.StatusPacket)
+						}
+						// compute string
 						output += " peer " + stat.Identifier + " nextID " + fmt.Sprint(stat.NextID)
 					}
 					fmt.Println(output + "\n" + g.peersString())
-					if statChan, ok := g.waitAck.Load(addr.String()); ok {
-						*statChan.(*chan *common.StatusPacket) <- gossipPacket.Status
+
+					if ackWaiting {
+						*ackChan <- gossipPacket.Status
 					} else {
 						_, err := g.syncWithPeer(addr.String(), gossipPacket.Status)
 						if err != nil {
@@ -260,12 +271,15 @@ func (g *Gossiper) waitForAck(fromAddr string, forMsg *common.GossipPacket, time
 	// -> maybe use slice of chan or better struct
 	// Q:
 	// - IN SYNC quand il est complètement synchro ? (pas de nouveau msg chez lui ou chez nous)
-	g.waitAck.Store(fromAddr, &ackChan)
+
+	// we wait for the status that acks this message (so wanted ID will be this ID + 1)
+	UID := generateRumorUniqueString(&fromAddr, forMsg.Rumor.Origin, forMsg.Rumor.ID+1)
+	g.waitAck.Store(UID, &ackChan)
 	go func() {
 		timer := time.NewTimer(timeout)
 		select {
 		case status := <-ackChan:
-			g.waitAck.Delete(fromAddr)
+			g.waitAck.Delete(UID)
 
 			didSync, err := g.syncWithPeer(fromAddr, status)
 			if err != nil {
@@ -274,7 +288,7 @@ func (g *Gossiper) waitForAck(fromAddr string, forMsg *common.GossipPacket, time
 				return
 			}
 		case <-timer.C:
-			g.waitAck.Delete(fromAddr)
+			g.waitAck.Delete(UID)
 		}
 
 		if common.FlipACoin() {
@@ -343,11 +357,11 @@ func (g *Gossiper) sendStatusPacket(peer string) error {
 }
 
 func (g *Gossiper) storeMessage(message *common.RumorMessage) {
-	g.messages.Store(generateRumorUniqueString(message.Origin, message.ID), *message)
+	g.messages.Store(generateRumorUniqueString(nil, message.Origin, message.ID), *message)
 }
 
 func (g *Gossiper) getMessage(origin string, id uint32) (*common.RumorMessage, bool) {
-	val, ok := g.messages.Load(generateRumorUniqueString(origin, id))
+	val, ok := g.messages.Load(generateRumorUniqueString(nil, origin, id))
 	if ok {
 		msg := val.(common.RumorMessage)
 		return &msg, ok
@@ -367,6 +381,12 @@ func (g *Gossiper) peersString() string {
 	return "PEERS " + strings.Join(peers, ",")
 }
 
-func generateRumorUniqueString(origin string, id uint32) string {
-	return fmt.Sprint(id) + "@" + origin
+// generate a unique string of the host@id@origin or id@origin
+// so host is optionnal (can be nil)
+func generateRumorUniqueString(host *string, origin string, id uint32) string {
+	if host != nil {
+		return *host + "@" + fmt.Sprint(id) + "@" + origin
+	} else {
+		return fmt.Sprint(id) + "@" + origin
+	}
 }
