@@ -15,10 +15,6 @@ type WebServer struct {
 	srv      *http.Server
 }
 
-type Message struct {
-	Message string
-}
-
 type ServerInfo struct {
 	Id      string
 	Address string
@@ -65,7 +61,7 @@ func (g *Gossiper) idHandler(writer http.ResponseWriter, request *http.Request) 
 	}
 	marshal, err := json.Marshal(msg)
 	if err == nil {
-		_, err := writer.Write(marshal)
+		_, err = writer.Write(marshal)
 		if err != nil {
 			writeErrorToHTTP(writer, err)
 			fmt.Println(err.Error())
@@ -85,7 +81,7 @@ func (g *Gossiper) getNodesHandler(writer http.ResponseWriter, request *http.Req
 
 	bytes, err := json.Marshal(msg)
 	if err == nil {
-		_, err := writer.Write(bytes)
+		_, err = writer.Write(bytes)
 		if err != nil {
 			writeErrorToHTTP(writer, err)
 			fmt.Println(err.Error())
@@ -97,11 +93,15 @@ func (g *Gossiper) getNodesHandler(writer http.ResponseWriter, request *http.Req
 }
 
 func (g *Gossiper) addNodeHandler(writer http.ResponseWriter, request *http.Request) {
-	request.ParseForm()
+	err := request.ParseForm()
+	if err != nil {
+		fmt.Println(err.Error())
+		http.Error(writer, err.Error(), 500)
+	}
 	nodeIP := request.Form.Get("IP")
 	port := request.Form.Get("Port")
 
-	err := g.AddPeer(nodeIP + ":" + port)
+	err = g.AddPeer(nodeIP + ":" + port)
 	if err != nil {
 		fmt.Println(err.Error())
 		http.Error(writer, err.Error(), 500)
@@ -109,7 +109,11 @@ func (g *Gossiper) addNodeHandler(writer http.ResponseWriter, request *http.Requ
 }
 
 func (g *Gossiper) postMessageHandler(writer http.ResponseWriter, request *http.Request) {
-	request.ParseForm()
+	err := request.ParseForm()
+	if err != nil {
+		fmt.Println(err.Error())
+		http.Error(writer, err.Error(), 500)
+	}
 	messsage := request.Form.Get("Message")
 	rumor := common.RumorMessage{
 		Text: messsage,
@@ -117,7 +121,7 @@ func (g *Gossiper) postMessageHandler(writer http.ResponseWriter, request *http.
 	gossip := common.GossipPacket{
 		Rumor: &rumor,
 	}
-	err := g.HandleClientMessage(&gossip)
+	err = g.HandleClientMessage(&gossip)
 	if err != nil {
 		writeErrorToHTTP(writer, err)
 		fmt.Println(err.Error())
@@ -136,7 +140,7 @@ func (g *Gossiper) getMessagesHandler(writer http.ResponseWriter, request *http.
 
 	bytes, err := json.Marshal(array)
 	if err == nil {
-		_, err := writer.Write(bytes)
+		_, err = writer.Write(bytes)
 		if err != nil {
 			writeErrorToHTTP(writer, err)
 		}

@@ -101,7 +101,7 @@ func (g *Gossiper) handleClients() {
 					gossipPacket.Simple.OriginalName = g.name
 					errorList := common.BroadcastMessage(g.peers.Elements(), gossipPacket, nil, g.gossipConn)
 					if errorList != nil {
-						for _, err := range errorList {
+						for _, err = range errorList {
 							fmt.Println(err.Error())
 						}
 					}
@@ -172,7 +172,7 @@ func (g *Gossiper) handleClients() {
 					if ackWaiting {
 						*ackChan <- gossipPacket.Status
 					} else {
-						_, err := g.syncWithPeer(addr.String(), gossipPacket.Status)
+						_, err = g.syncWithPeer(addr.String(), gossipPacket.Status)
 						if err != nil {
 							fmt.Println(err.Error())
 						}
@@ -183,7 +183,7 @@ func (g *Gossiper) handleClients() {
 					fmt.Println(output + g.peersString())
 					relayAddr := addr.String()
 					errList := common.BroadcastMessage(g.peers.Elements(), gossipPacket, &relayAddr, g.gossipConn)
-					for _, err := range errList {
+					for _, err = range errList {
 						fmt.Println(err.Error())
 					}
 				}
