@@ -72,7 +72,9 @@ func NewGossiper(clientAddress, gossipAddress, name, peers string, simpleBroadca
 	return g, nil
 }
 
-func (g *Gossiper) handleClients() {
+// Start two listeners : one for the client side (listening on UIPort) and one
+// for the peers (listening on gossipAddr)
+func (g *Gossiper) StartGossiper() {
 	// Handle clients messages
 	go func() {
 		buffer := make([]byte, 4096)
@@ -270,6 +272,7 @@ func (g *Gossiper) startMongering(gossipPacket *common.GossipPacket, host *strin
 	return nil
 }
 
+// this will wait that the peer acknowledge this specific packet (ID + origin must be correct)
 func (g *Gossiper) waitForAck(fromAddr string, forMsg *common.GossipPacket, timeout time.Duration) {
 	ackChan := make(chan *common.StatusPacket)
 
@@ -371,6 +374,8 @@ func (g *Gossiper) getMessage(origin string, id uint32) (*common.RumorMessage, b
 	return nil, ok
 }
 
+// returns if the packet is valid (message ID is expected ID for the origin or 1 if origin
+// is not known
 func (g *Gossiper) isNewValidMessage(message *common.RumorMessage) bool {
 	val, _ := g.clocks.LoadOrStore(message.Origin, uint32(1))
 

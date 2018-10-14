@@ -6,6 +6,7 @@ let messageURL = window.location.origin + "/message";
 let idURL = window.location.origin + "/id";
 let nodeURL = window.location.origin + "/node";
 
+// configure the DOM once it's fully loaded
 $(document).ready(function () {
     pollNewMessages();
     pollNewNode();
@@ -19,6 +20,8 @@ $(document).ready(function () {
             $("#msg").val("")
         })
     });
+
+    // configure the new node form
     $("#new-node-form").submit(function (e) {
         e.preventDefault();
         let ip = $("#ip-form").val();
@@ -36,6 +39,7 @@ $(document).ready(function () {
     })
 });
 
+// poll for new nodes on the gossiper
 function pollNewNode() {
     $.getJSON(nodeURL, function (data) {
         data.Peers.forEach(peer => {
@@ -55,6 +59,7 @@ function pollNewNode() {
     })
 }
 
+// poll for new messages on the gossiper
 function pollNewMessages() {
     $.getJSON(messageURL, function (data) {
         data.sort(function (msg1, msg2) {
@@ -71,10 +76,12 @@ function pollNewMessages() {
     });
 }
 
+// creates a unique string of the form id@origin
 function generateUniqueID(msg) {
     return "" + msg.ID + "@" + msg.Origin
 }
 
+// add a new message to the HTML page, in the correct tab.
 function addMessage(msg) {
     msgIDs.add(generateUniqueID(msg));
     let peerID = msg.Origin.replace(/ /g, "_");
@@ -91,6 +98,7 @@ function addMessage(msg) {
     `)
 }
 
+// add a new peer tab and its associated content pane
 function addPeerPanel(peer) {
     let first = peers.size === 0 ? 'in active show' : '';
     peers.add(peer);

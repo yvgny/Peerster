@@ -32,7 +32,7 @@ func main() {
 		ws.StartWebServer()
 	}
 
-	gossiper.handleClients()
+	gossiper.StartGossiper()
 
 	// Let the server run
 	wg := &sync.WaitGroup{}

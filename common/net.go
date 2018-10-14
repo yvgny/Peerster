@@ -34,16 +34,20 @@ type GossipPacket struct {
 	Status *StatusPacket
 }
 
+// Sends a GossipPacket at a specific host. A connection can be specified or can be nil.
+// If it is nil, a new connection is openend on a random port. If a connection is given,
+// it has to be unconnected. Thus, if the connection is opened using Dial, SendMessage
+// will throw an error
 func SendMessage(address string, packet *GossipPacket, conn *net.UDPConn) error {
 	udpAddr, err := net.ResolveUDPAddr("udp4", address)
 	if err != nil {
-		return errors.New("Cannot resolve gossiper address: " + err.Error())
+		return errors.New("Cannot resolve peer address: " + err.Error())
 	}
 
 	if conn == nil {
 		conn, err = net.ListenUDP("udp", nil)
 		if err != nil {
-			return errors.New("Cannot connect to gossiper: " + err.Error())
+			return errors.New("Cannot open new connection: " + err.Error())
 		}
 	}
 
@@ -60,6 +64,9 @@ func SendMessage(address string, packet *GossipPacket, conn *net.UDPConn) error 
 	return nil
 }
 
+// Broadcast a message to a list of hosts. This uses SendMessage, so the connection can be nil
+// (please refer to the function SendMessage for more information). Also, an optional sender
+// can be specified. If it's the case, the message will be broadcast to every hosts except the sender
 func BroadcastMessage(hosts []string, message *GossipPacket, sender *string, conn *net.UDPConn) []error {
 	errorList := make([]error, 0)
 	for _, host := range hosts {
