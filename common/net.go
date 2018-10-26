@@ -19,6 +19,14 @@ type RumorMessage struct {
 	Text   string
 }
 
+type PrivateMessage struct {
+	Origin      string
+	ID          uint32
+	Text        string
+	Destination string
+	HopLimit    uint32
+}
+
 type PeerStatus struct {
 	Identifier string
 	NextID     uint32
@@ -29,9 +37,10 @@ type StatusPacket struct {
 }
 
 type GossipPacket struct {
-	Simple *SimpleMessage
-	Rumor  *RumorMessage
-	Status *StatusPacket
+	Simple  *SimpleMessage
+	Rumor   *RumorMessage
+	Status  *StatusPacket
+	Private *PrivateMessage
 }
 
 // Sends a GossipPacket at a specific host. A connection can be specified or can be nil.

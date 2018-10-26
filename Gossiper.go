@@ -11,6 +11,10 @@ import (
 	"time"
 )
 
+const DefaultHopLimit uint32 = 10
+const DefaultUdpBufferSize int = 4096
+const AntiEntropyPeriod int = 20
+
 type Gossiper struct {
 	clientAddress *net.UDPAddr
 	gossipAddress *net.UDPAddr
@@ -72,7 +76,9 @@ func NewGossiper(clientAddress, gossipAddress, name, peers string, simpleBroadca
 		simple:        simpleBroadcastMode,
 	}
 
-	g.startAntiEntropy(time.Second)
+	g.startAntiEntropy(time.Duration(AntiEntropyPeriod) * time.Second)
+
+	g.startRouteRumoring(time.Duration(rtimer) * time.Second)
 
 	return g, nil
 }
@@ -82,7 +88,7 @@ func NewGossiper(clientAddress, gossipAddress, name, peers string, simpleBroadca
 func (g *Gossiper) StartGossiper() {
 	// Handle clients messages
 	go func() {
-		buffer := make([]byte, 4096)
+		buffer := make([]byte, DefaultUdpBufferSize)
 		for {
 			n, _, err := g.clientConn.ReadFromUDP(buffer)
 			if err != nil {
@@ -112,6 +118,17 @@ func (g *Gossiper) StartGossiper() {
 							fmt.Println(err.Error())
 						}
 					}
+				} else if packet := gossipPacket.Private; packet != nil {
+					packet.Origin = g.name
+					packet.ID = 0
+					packet.HopLimit = DefaultHopLimit
+					fmt.Println("Received message, routing table is :\n" + g.routingTable.String())
+					if hop, ok := g.routingTable.getNextHop(packet.Destination); ok {
+						if err = common.SendMessage(hop, gossipPacket, g.gossipConn); err != nil {
+							fmt.Println(err.Error())
+						}
+					}
+
 				}
 			}()
 		}
@@ -119,7 +136,7 @@ func (g *Gossiper) StartGossiper() {
 
 	// Handle peers messages
 	go func() {
-		buffer := make([]byte, 4096)
+		buffer := make([]byte, DefaultUdpBufferSize)
 		for {
 			n, addr, err := g.gossipConn.ReadFromUDP(buffer)
 			if err != nil {
@@ -150,7 +167,7 @@ func (g *Gossiper) StartGossiper() {
 
 						// Update DSDV table
 						g.routingTable.updateRoute(gossipPacket.Rumor.Origin, addr.String())
-						fmt.Printf("DSDV %s %s", gossipPacket.Rumor.Origin, addr.String())
+						fmt.Printf("DSDV %s %s\n", gossipPacket.Rumor.Origin, addr.String())
 
 						// Send ack
 						if err = g.sendStatusPacket(addr.String()); err != nil {
@@ -199,6 +216,20 @@ func (g *Gossiper) StartGossiper() {
 					errList := common.BroadcastMessage(g.peers.Elements(), gossipPacket, &relayAddr, g.gossipConn)
 					for _, err = range errList {
 						fmt.Println(err.Error())
+					}
+				} else if gossipPacket.Private != nil {
+					packet := gossipPacket.Private
+					if packet.Destination == g.name {
+						fmt.Printf("PRIVATE origin %s hop-limit %d contents %s", packet.Origin, packet.HopLimit, packet.Text)
+					} else if hop, ok := g.routingTable.getNextHop(packet.Destination); ok {
+						// Send packet to next hop
+						packet.HopLimit -= 1
+						if packet.HopLimit > 0 {
+							err = common.SendMessage(hop, gossipPacket, g.gossipConn)
+							if err != nil {
+								fmt.Println(err.Error())
+							}
+						}
 					}
 				}
 
@@ -270,6 +301,8 @@ func (g *Gossiper) startRouteRumoring(period time.Duration) {
 			routeMsg.Rumor.ID = g.incrementClock(g.name)
 			if err := common.SendMessage(randomHost, &routeMsg, g.gossipConn); err != nil {
 				fmt.Println(err.Error())
+			} else {
+				g.storeMessage(routeMsg.Rumor)
 			}
 		}
 	}
@@ -361,8 +394,8 @@ func (g *Gossiper) syncWithPeer(peer string, status *common.StatusPacket) (bool,
 	for _, peerStatus := range status.Want {
 		// Check if peer is up to date, if not send him the new messages
 		if clock, ok := g.clocks.Load(peerStatus.Identifier); ok && clock.(uint32) > peerStatus.NextID {
-			msg, ok := g.getMessage(peerStatus.Identifier, peerStatus.NextID)
-			if !ok {
+			msg, loaded := g.getMessage(peerStatus.Identifier, peerStatus.NextID)
+			if !loaded {
 				return true, errors.New(fmt.Sprintf("message n°%d from %s is not stored but associated clock is %d", peerStatus.NextID+1, peerStatus.Identifier, clock))
 			}
 			gossipPack := common.GossipPacket{
