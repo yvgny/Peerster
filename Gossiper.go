@@ -21,6 +21,7 @@ type Gossiper struct {
 	clocks        *sync.Map
 	waitAck       *sync.Map
 	messages      *sync.Map
+	routingTable  *RoutingTable
 	simple        bool
 	mutex         sync.Mutex
 }
@@ -65,6 +66,7 @@ func NewGossiper(clientAddress, gossipAddress, name, peers string, simpleBroadca
 		clocks:        &clocksMap,
 		waitAck:       &syncMap,
 		messages:      &messagesMap,
+		routingTable:  NewRoutingTable(),
 		simple:        simpleBroadcastMode,
 	}
 
@@ -140,6 +142,10 @@ func (g *Gossiper) StartGossiper() {
 					if g.isNewValidMessage(gossipPacket.Rumor) {
 						g.clocks.Store(gossipPacket.Rumor.Origin, gossipPacket.Rumor.ID+1)
 						g.storeMessage(gossipPacket.Rumor)
+
+						// Update DSDV table
+						g.routingTable.updateRoute(gossipPacket.Rumor.Origin, addr.String())
+						fmt.Printf("DSDV %s %s", gossipPacket.Rumor.Origin, addr.String())
 
 						// Send ack
 						if err = g.sendStatusPacket(addr.String()); err != nil {
