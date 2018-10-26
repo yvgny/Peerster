@@ -122,7 +122,6 @@ func (g *Gossiper) StartGossiper() {
 					packet.Origin = g.name
 					packet.ID = 0
 					packet.HopLimit = DefaultHopLimit
-					fmt.Println("Received message, routing table is :\n" + g.routingTable.String())
 					if hop, ok := g.routingTable.getNextHop(packet.Destination); ok {
 						if err = common.SendMessage(hop, gossipPacket, g.gossipConn); err != nil {
 							fmt.Println(err.Error())
@@ -220,7 +219,7 @@ func (g *Gossiper) StartGossiper() {
 				} else if gossipPacket.Private != nil {
 					packet := gossipPacket.Private
 					if packet.Destination == g.name {
-						fmt.Printf("PRIVATE origin %s hop-limit %d contents %s", packet.Origin, packet.HopLimit, packet.Text)
+						fmt.Printf("PRIVATE origin %s hop-limit %d contents %s\n", packet.Origin, packet.HopLimit, packet.Text)
 					} else if hop, ok := g.routingTable.getNextHop(packet.Destination); ok {
 						// Send packet to next hop
 						packet.HopLimit -= 1
@@ -245,6 +244,20 @@ func (g *Gossiper) incrementClock(peer string) uint32 {
 	currentClockInter, _ := g.clocks.LoadOrStore(g.name, uint32(1))
 	currentClock := currentClockInter.(uint32)
 	g.clocks.Store(g.name, currentClock+1)
+
+	return currentClock
+}
+
+func (g *Gossiper) decrementClock(peer string) uint32 {
+	g.mutex.Lock()
+	defer g.mutex.Unlock()
+	currentClockInter, loaded := g.clocks.LoadOrStore(g.name, uint32(1))
+	currentClock := currentClockInter.(uint32)
+
+	if loaded {
+		return currentClock
+	}
+	g.clocks.Store(g.name, currentClock-1)
 
 	return currentClock
 }
@@ -297,14 +310,13 @@ func (g *Gossiper) startRouteRumoring(period time.Duration) {
 		},
 	}
 	sendMsg := func() {
-		if randomHost, found := g.peers.Pick(); found {
-			routeMsg.Rumor.ID = g.incrementClock(g.name)
-			if err := common.SendMessage(randomHost, &routeMsg, g.gossipConn); err != nil {
+		routeMsg.Rumor.ID = g.incrementClock(g.name)
+		for _, host := range g.peers.Elements() {
+			if err := common.SendMessage(host, &routeMsg, g.gossipConn); err != nil {
 				fmt.Println(err.Error())
-			} else {
-				g.storeMessage(routeMsg.Rumor)
 			}
 		}
+		g.storeMessage(routeMsg.Rumor)
 	}
 	// Send a first announcement
 	sendMsg()
