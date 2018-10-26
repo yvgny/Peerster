@@ -22,6 +22,7 @@ type Gossiper struct {
 	waitAck       *sync.Map
 	messages      *sync.Map
 	simple        bool
+	mutex         sync.Mutex
 }
 
 func NewGossiper(clientAddress, gossipAddress, name, peers string, simpleBroadcastMode bool) (*Gossiper, error) {
@@ -195,14 +196,23 @@ func (g *Gossiper) StartGossiper() {
 	}()
 }
 
-func (g *Gossiper) HandleClientMessage(packet *common.GossipPacket) error {
-	packet.Rumor.Origin = g.name
+// Returns the current value of the clock of a peer and increment it
+func (g *Gossiper) incrementClock(peer string) uint32 {
+	g.mutex.Lock()
+	defer g.mutex.Unlock()
 	currentClockInter, _ := g.clocks.LoadOrStore(g.name, uint32(1))
 	currentClock := currentClockInter.(uint32)
+	g.clocks.Store(g.name, currentClock+1)
+
+	return currentClock
+}
+
+func (g *Gossiper) HandleClientMessage(packet *common.GossipPacket) error {
+	packet.Rumor.Origin = g.name
+	currentClock := g.incrementClock(g.name)
 	output := fmt.Sprintf("CLIENT MESSAGE %s\n", packet.Rumor.Text)
 	fmt.Println(output + g.peersString())
 	packet.Rumor.ID = currentClock
-	g.clocks.Store(g.name, currentClock+1)
 	g.storeMessage(packet.Rumor)
 
 	if err := g.startMongering(packet, nil, nil); err != nil {
