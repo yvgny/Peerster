@@ -16,10 +16,11 @@ func main() {
 	peersArg := flag.String("peers", "", "coma separated list of peers of the form ip:port")
 	broadcastModeArg := flag.Bool("simple", false, "run gossiper in simple broadcast mode")
 	wsArg := flag.Bool("ws", false, "start a web server on 127.0.0.1:8080 with basic GUI")
+	rtimer := flag.Int("rtimer", 0, "route rumors sending period in seconds, 0 to disable sending of route rumors")
 	flag.Parse()
 	fmt.Printf("UIPort = %s, gossipAddr = %s, name = %s, peers = %s, broadcastEnabled = %t\n", *uiPortArg, *gossipAddressArg, *nameArg, *peersArg, *broadcastModeArg)
 
-	gossiper, err := NewGossiper(common.LocalAddress+":"+*uiPortArg, *gossipAddressArg, *nameArg, *peersArg, *broadcastModeArg)
+	gossiper, err := NewGossiper(common.LocalAddress+":"+*uiPortArg, *gossipAddressArg, *nameArg, *peersArg, *broadcastModeArg, *rtimer)
 	if err != nil {
 		fmt.Println(err.Error())
 		os.Exit(1)

@@ -134,7 +134,11 @@ func (g *Gossiper) getMessagesHandler(writer http.ResponseWriter, request *http.
 	array := make([]common.RumorMessage, 0)
 	g.messages.Range(func(key, value interface{}) bool {
 		msg := value.(common.RumorMessage)
-		array = append(array, msg)
+
+		// Remove route rumor messages
+		if msg.Text != "" {
+			array = append(array, msg)
+		}
 		return true
 	})
 

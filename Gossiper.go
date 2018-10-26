@@ -17,6 +17,7 @@ type Gossiper struct {
 	clientConn    *net.UDPConn
 	gossipConn    *net.UDPConn
 	name          string
+	rtimer        int
 	peers         *common.ConcurrentSet
 	clocks        *sync.Map
 	waitAck       *sync.Map
@@ -26,7 +27,7 @@ type Gossiper struct {
 	mutex         sync.Mutex
 }
 
-func NewGossiper(clientAddress, gossipAddress, name, peers string, simpleBroadcastMode bool) (*Gossiper, error) {
+func NewGossiper(clientAddress, gossipAddress, name, peers string, simpleBroadcastMode bool, rtimer int) (*Gossiper, error) {
 	cAddress, err := net.ResolveUDPAddr("udp4", clientAddress)
 	if err != nil {
 		return nil, errors.New("Cannot resolve client address " + clientAddress + ": " + err.Error())
@@ -63,6 +64,7 @@ func NewGossiper(clientAddress, gossipAddress, name, peers string, simpleBroadca
 		gossipConn:    gConn,
 		name:          name,
 		peers:         peersSet,
+		rtimer:        rtimer,
 		clocks:        &clocksMap,
 		waitAck:       &syncMap,
 		messages:      &messagesMap,
@@ -136,8 +138,11 @@ func (g *Gossiper) StartGossiper() {
 				g.peers.Store(addr.String())
 
 				if gossipPacket.Rumor != nil {
-					output := fmt.Sprintf("RUMOR origin %s from %s ID %d contents %s\n", gossipPacket.Rumor.Origin, addr, gossipPacket.Rumor.ID, gossipPacket.Rumor.Text)
-					fmt.Println(output + g.peersString())
+					// Remove route rumor messages
+					if gossipPacket.Rumor.Text != "" {
+						output := fmt.Sprintf("RUMOR origin %s from %s ID %d contents %s\n", gossipPacket.Rumor.Origin, addr, gossipPacket.Rumor.ID, gossipPacket.Rumor.Text)
+						fmt.Println(output + g.peersString())
+					}
 
 					if g.isNewValidMessage(gossipPacket.Rumor) {
 						g.clocks.Store(gossipPacket.Rumor.Origin, gossipPacket.Rumor.ID+1)
@@ -239,17 +244,48 @@ func (g *Gossiper) AddPeer(peer string) error {
 }
 
 func (g *Gossiper) startAntiEntropy(period time.Duration) {
-	go func() {
-		ticker := time.NewTicker(period)
-		for range ticker.C {
-			randomHost, found := g.peers.Pick()
-			if !found {
-				continue
-			} else if err := g.sendStatusPacket(randomHost); err != nil {
+	if period > 0 {
+		go func() {
+			ticker := time.NewTicker(period)
+			for range ticker.C {
+				randomHost, found := g.peers.Pick()
+				if !found {
+					continue
+				} else if err := g.sendStatusPacket(randomHost); err != nil {
+					fmt.Println(err.Error())
+				}
+			}
+		}()
+	}
+}
+
+func (g *Gossiper) startRouteRumoring(period time.Duration) {
+	routeMsg := common.GossipPacket{
+		Rumor: &common.RumorMessage{
+			Origin: g.name,
+		},
+	}
+	sendMsg := func() {
+		if randomHost, found := g.peers.Pick(); found {
+			routeMsg.Rumor.ID = g.incrementClock(g.name)
+			if err := common.SendMessage(randomHost, &routeMsg, g.gossipConn); err != nil {
 				fmt.Println(err.Error())
 			}
 		}
-	}()
+	}
+	// Send a first announcement
+	sendMsg()
+
+	// If enabled, announce periodically
+	if period > 0 {
+		go func() {
+			ticker := time.NewTicker(period)
+			for range ticker.C {
+				sendMsg()
+			}
+		}()
+	}
+
 }
 
 func (g *Gossiper) startMongering(gossipPacket *common.GossipPacket, host *string, lastHost *string) error {
