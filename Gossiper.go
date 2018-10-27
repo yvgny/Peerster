@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"github.com/dedis/protobuf"
@@ -13,6 +14,7 @@ import (
 
 const DefaultHopLimit uint32 = 10
 const DefaultUdpBufferSize int = 4096
+const DefaultChunkSize int = 8192
 const AntiEntropyPeriod int = 20
 
 type Gossiper struct {
@@ -26,6 +28,7 @@ type Gossiper struct {
 	clocks        *sync.Map
 	waitAck       *sync.Map
 	messages      *sync.Map
+	data          *DataManager
 	routingTable  *RoutingTable
 	simple        bool
 	mutex         sync.Mutex
@@ -72,6 +75,7 @@ func NewGossiper(clientAddress, gossipAddress, name, peers string, simpleBroadca
 		clocks:        &clocksMap,
 		waitAck:       &syncMap,
 		messages:      &messagesMap,
+		data:          NewDataManager(),
 		routingTable:  NewRoutingTable(),
 		simple:        simpleBroadcastMode,
 	}
@@ -123,6 +127,12 @@ func (g *Gossiper) StartGossiper() {
 					if err != nil {
 						fmt.Println(err.Error())
 					}
+				} else if gossipPacket.File != nil {
+					hash, err := g.data.addFile(gossipPacket.File.Path)
+					if err != nil {
+						fmt.Println(err.Error())
+					}
+					fmt.Printf("Added new file from %s with hash %s\n", gossipPacket.File.Path, hex.EncodeToString(hash))
 				}
 			}()
 		}
@@ -225,6 +235,11 @@ func (g *Gossiper) StartGossiper() {
 							}
 						}
 					}
+				} else if gossipPacket.File != nil {
+					path := gossipPacket.File.Path
+					if exists, _ := common.FileExists(path); !exists {
+						fmt.Printf("File %s not found", path)
+					}
 				}
 
 			}()
@@ -234,14 +249,14 @@ func (g *Gossiper) StartGossiper() {
 
 func (g *Gossiper) sendPrivateMessage(destination, text string) error {
 	packet := &common.PrivateMessage{
-		Destination:destination,
-		Text:text,
-		Origin:g.name,
-		ID:0,
-		HopLimit:DefaultHopLimit,
+		Destination: destination,
+		Text:        text,
+		Origin:      g.name,
+		ID:          0,
+		HopLimit:    DefaultHopLimit,
 	}
 	gossipPacket := &common.GossipPacket{
-		Private:packet,
+		Private: packet,
 	}
 
 	if hop, ok := g.routingTable.getNextHop(packet.Destination); ok {
