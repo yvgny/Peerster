@@ -119,15 +119,10 @@ func (g *Gossiper) StartGossiper() {
 						}
 					}
 				} else if packet := gossipPacket.Private; packet != nil {
-					packet.Origin = g.name
-					packet.ID = 0
-					packet.HopLimit = DefaultHopLimit
-					if hop, ok := g.routingTable.getNextHop(packet.Destination); ok {
-						if err = common.SendMessage(hop, gossipPacket, g.gossipConn); err != nil {
-							fmt.Println(err.Error())
-						}
+					err = g.sendPrivateMessage(packet.Destination, packet.Text)
+					if err != nil {
+						fmt.Println(err.Error())
 					}
-
 				}
 			}()
 		}
@@ -235,6 +230,27 @@ func (g *Gossiper) StartGossiper() {
 			}()
 		}
 	}()
+}
+
+func (g *Gossiper) sendPrivateMessage(destination, text string) error {
+	packet := &common.PrivateMessage{
+		Destination:destination,
+		Text:text,
+		Origin:g.name,
+		ID:0,
+		HopLimit:DefaultHopLimit,
+	}
+	gossipPacket := &common.GossipPacket{
+		Private:packet,
+	}
+
+	if hop, ok := g.routingTable.getNextHop(packet.Destination); ok {
+		if err := common.SendMessage(hop, gossipPacket, g.gossipConn); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 // Returns the current value of the clock of a peer and increment it

@@ -34,6 +34,15 @@ func (rt *RoutingTable) getNextHop(destination string) (string, bool) {
 	return nextHop, ok
 }
 
+func (rt *RoutingTable) Elements() []string {
+	peers := make([]string, 0)
+	rt.table.Range(func(dest, host interface{}) bool {
+		peers = append(peers, dest.(string))
+		return true
+	})
+	return peers
+}
+
 func (rt *RoutingTable) String() string {
 	output := ""
 	rt.table.Range(func(dest, host interface{}) bool {

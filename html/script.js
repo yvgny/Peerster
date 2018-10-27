@@ -1,15 +1,28 @@
+"use strict";
+
 let msgIDs = new Set();
 let peers = new Set();
 let nodes = new Set();
+let contacts = new Set();
 let PERIOD = 500;
+let ID = "";
 let messageURL = window.location.origin + "/message";
 let idURL = window.location.origin + "/id";
 let nodeURL = window.location.origin + "/node";
+let contactsURL = window.location.origin + "/contacts";
+let pmURL = window.location.origin + "/private-message";
 
 // configure the DOM once it's fully loaded
 $(document).ready(function () {
+    // Load ID
+    $.getJSON(idURL, function (data) {
+        ID = data.Id;
+        $("#idStr").append(`<strong>${ID}</strong>`)
+    });
+
     pollNewMessages();
     pollNewNode();
+    pollNewContacts();
 
     // Configure message form
     $("#new-message-form").submit(function (e) {
@@ -33,10 +46,20 @@ $(document).ready(function () {
         })
     });
 
-    // Load ID
-    $.getJSON(idURL, function (data) {
-        $("#idStr").append(`<strong>${data.Id}</strong>`)
-    })
+    // Configure private message double click event
+    $('#contacts-table tbody').on('click', 'tr td', function () {
+        let dest = $(this).text();
+        $('#modal-pm-title').text(dest);
+        $('#btn-send-pm').off('click').click(function () {
+            // Send the private message when button is clicked
+            let msgText = $('#pm-text').val();
+            $.post(pmURL, {Destination: dest, Text:msgText}, function () {
+                $('#pm-text').val("");
+                $('#modal-private-message').modal('hide')
+            })
+        });
+        $('#modal-private-message').modal('show');
+    });
 });
 
 // poll for new nodes on the gossiper
@@ -75,6 +98,38 @@ function pollNewMessages() {
         setTimeout(pollNewMessages, PERIOD);
     });
 }
+
+function pollNewContacts() {
+    $.getJSON(contactsURL, function (data) {
+        data.Contacts.sort(function (contactA, contactB) {
+            let a = contactA.toLowerCase();
+            let b = contactB.toLowerCase();
+
+            if (a < b) {
+                return -1;
+            } else if (a > b) {
+                return 1;
+            }
+
+            return 0
+        }).forEach(contact => {
+                if (!contacts.has(contact) && contact !== ID) {
+                    addNewContact(contact)
+                }
+            }
+        )
+    })
+}
+
+function addNewContact(contact) {
+    contacts.add(contact);
+    $("#contacts-table-content").append(`
+        <tr>
+            <td>${contact}</td>
+        </tr>
+`)
+}
+
 
 // creates a unique string of the form id@origin
 function generateUniqueID(msg) {
