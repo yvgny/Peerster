@@ -36,8 +36,14 @@ type StatusPacket struct {
 	Want []PeerStatus
 }
 
-type FilePacket struct {
+type FileIndexPacket struct {
 	Path string
+}
+
+type FileDownloadPacket struct {
+	User      string
+	HashValue []byte
+	Filename  string
 }
 
 type DataRequest struct {
@@ -56,13 +62,14 @@ type DataReply struct {
 }
 
 type GossipPacket struct {
-	Simple      *SimpleMessage
-	Rumor       *RumorMessage
-	Status      *StatusPacket
-	Private     *PrivateMessage
-	DataRequest *DataRequest
-	DataReply   *DataReply
-	File        *FilePacket
+	Simple       *SimpleMessage
+	Rumor        *RumorMessage
+	Status       *StatusPacket
+	Private      *PrivateMessage
+	DataRequest  *DataRequest
+	DataReply    *DataReply
+	FileIndex    *FileIndexPacket
+	FileDownload *FileDownloadPacket
 }
 
 // Sends a GossipPacket at a specific host. A connection can be specified or can be nil.

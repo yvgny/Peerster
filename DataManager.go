@@ -3,6 +3,7 @@ package main
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"io"
 	"os"
 	"sync"
@@ -48,7 +49,6 @@ func (dm *DataManager) addFile(path string) ([]byte, error) {
 		copiedData := make([]byte, len(dataChunk))
 		copy(copiedData, dataChunk)
 		dm.data.Store(hex.EncodeToString(chunkHash[:]), copiedData)
-
 		metafile = append(metafile, chunkHash[:]...)
 	}
 	metafileHash := sha256.Sum256(metafile)
@@ -57,12 +57,32 @@ func (dm *DataManager) addFile(path string) ([]byte, error) {
 	return metafileHash[:], nil
 }
 
+func (dm *DataManager) addData(data, hash []byte) error {
+	hashBytes := sha256.Sum256(data)
+	hash1 := hex.EncodeToString(hash)
+	hash2 := hex.EncodeToString(hashBytes[:])
+
+	if hash1 != hash2 {
+		return errors.New("provided hash does not match with hash computed from data")
+	}
+
+	copied := make([]byte, len(data))
+	copy(copied, data)
+
+	dm.data.Store(hash1, copied)
+
+	return nil
+}
+
 func (dm *DataManager) getData(hash []byte) ([]byte, bool) {
 	hashStr := hex.EncodeToString(hash)
 	rawData, ok := dm.data.Load(hashStr)
 	if !ok {
 		return nil, false
 	}
+	data := rawData.([]byte)
+	copied := make([]byte, len(data))
+	copy(copied, data)
 
-	return rawData.([]byte), true
+	return copied, true
 }
