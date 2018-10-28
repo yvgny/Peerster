@@ -19,7 +19,7 @@ func NewDataManager() *DataManager {
 	}
 }
 
-// Index a new file and returns the has of its meta file
+// Index a new file and returns the hash of its meta file
 func (dm *DataManager) addFile(path string) ([]byte, error) {
 	file, err := os.Open(path)
 	if err != nil {

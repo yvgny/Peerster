@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 )
 
-const SharedFilesFolder string = "_SharedFiles"
 
 func main() {
 	uiPortArg := flag.String("UIPort", "8080", "port for the UI client")
@@ -33,20 +32,14 @@ func main() {
 			Text:        *msgArg,
 		}
 	} else if fileUpload {
-		ex, err := os.Executable()
-		if err != nil {
-			fmt.Println(err)
-			os.Exit(1)
-		}
-		exPath := filepath.Dir(ex)
-		pathStr := filepath.Join(exPath, SharedFilesFolder, *fileArg)
+		pathStr := filepath.Join(common.SharedFilesFolder, *fileArg)
 		exists, _ := common.FileExists(pathStr)
 		if !exists {
-			fmt.Printf("File %s does not exists in folder %s\n", *fileArg, SharedFilesFolder)
+			fmt.Printf("File %s does not exists in folder %s\n", *fileArg, common.SharedFilesFolder)
 			os.Exit(1)
 		}
 		packet.FileIndex = &common.FileIndexPacket{
-			Path: pathStr,
+			Filename: *fileArg,
 		}
 	} else if rumorMsg {
 		packet.Rumor = &common.RumorMessage{

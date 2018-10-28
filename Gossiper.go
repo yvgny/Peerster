@@ -109,7 +109,7 @@ func (g *Gossiper) StartGossiper() {
 				continue
 			}
 			gossipPacket := &common.GossipPacket{}
-			err = protobuf.Decode(buffer[0:n], gossipPacket)
+			err = protobuf.Decode(buffer[:n], gossipPacket)
 			if err != nil {
 				fmt.Println(err.Error())
 				continue
@@ -137,11 +137,11 @@ func (g *Gossiper) StartGossiper() {
 						fmt.Println(err.Error())
 					}
 				} else if gossipPacket.FileIndex != nil {
-					hash, err := g.data.addFile(gossipPacket.FileIndex.Path)
+					hash, err := g.data.addFile(filepath.Join(common.SharedFilesFolder, gossipPacket.FileIndex.Filename))
 					if err != nil {
 						fmt.Println(err.Error())
 					}
-					fmt.Printf("Added new file from %s with hash %s\n", gossipPacket.FileIndex.Path, hex.EncodeToString(hash))
+					fmt.Printf("Added new file from %s with hash %s\n", gossipPacket.FileIndex.Filename, hex.EncodeToString(hash))
 				} else if gossipPacket.FileDownload != nil {
 					err = g.downloadFile(gossipPacket.FileDownload.User, gossipPacket.FileDownload.HashValue, gossipPacket.FileDownload.Filename)
 					if err != nil {
@@ -384,13 +384,7 @@ func (g *Gossiper) downloadFile(user string, hash []byte, filename string) error
 					fmt.Println(errors.New("cannot download metafile: " + err.Error()))
 				}
 				// create file
-				ex, err := os.Executable()
-				if err != nil {
-					fmt.Println(err)
-					return
-				}
-				exPath := filepath.Dir(ex)
-				pathStr := filepath.Join(exPath, DownloadFolder, filename)
+				pathStr := filepath.Join(DownloadFolder, filename)
 				f, err := os.Create(pathStr)
 				if err != nil {
 					fmt.Println(err)

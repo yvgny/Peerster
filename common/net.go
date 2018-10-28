@@ -37,7 +37,7 @@ type StatusPacket struct {
 }
 
 type FileIndexPacket struct {
-	Path string
+	Filename string
 }
 
 type FileDownloadPacket struct {
