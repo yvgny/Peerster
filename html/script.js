@@ -12,6 +12,7 @@ let nodeURL = window.location.origin + "/node";
 let contactsURL = window.location.origin + "/contacts";
 let pmURL = window.location.origin + "/private-message";
 let indexFileURL = window.location.origin + "/index-file";
+let downloadFileURL = window.location.origin + "/download-file";
 
 // configure the DOM once it's fully loaded
 $(document).ready(function () {
@@ -58,7 +59,7 @@ $(document).ready(function () {
         $('#btn-send-pm').off('click').click(function () {
             // Send the private message when button is clicked
             let msgText = $('#pm-text').val();
-            $.post(pmURL, {Destination: dest, Text:msgText}, function () {
+            $.post(pmURL, {Destination: dest, Text: msgText}, function () {
                 $('#pm-text').val("");
                 $('#modal-private-message').modal('hide')
             }).fail(function (xhr) {
@@ -87,6 +88,23 @@ $(document).ready(function () {
         let fullpath = $('#customFile').val();
         let filename = fullpath.replace(/^.*[\\\/]/, '');
         $('#filename').text(filename)
+    })
+
+    // Configure file download box
+    $('#file-download-form').submit(function (e) {
+        e.preventDefault();
+        let filename = $('#file-download-filename').val();
+        let userID = $('#file-download-host-id').val();
+        let fileID = $('#file-download-file-id').val();
+        $.post(downloadFileURL, {Filename: filename, User: userID, HashValue: fileID}, function () {
+            // handle success
+            $('#file-download-filename').val("");
+            $('#file-download-host-id').val("");
+            $('#file-download-file-id').val("");
+            showModalAlert("The file is being downloaded !", false)
+        }).fail(function (xhr) {
+            showModalAlert("Unable to start download: " + xhr.responseText, true)
+        })
     })
 });
 

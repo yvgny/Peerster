@@ -35,6 +35,7 @@ func NewWebServer(g *Gossiper) *WebServer {
 	r.HandleFunc("/message", g.postMessageHandler).Methods("POST")
 	r.HandleFunc("/private-message", g.postPrivateMessageHandler).Methods("POST")
 	r.HandleFunc("/index-file", g.postFileToIndexHandler).Methods("POST")
+	r.HandleFunc("/download-file", g.postFileToDownload).Methods("POST")
 	r.HandleFunc("/node", g.getNodesHandler).Methods("GET")
 	r.HandleFunc("/node", g.addNodeHandler).Methods("POST")
 	r.HandleFunc("/contacts", g.getContactsHandler).Methods("GET")
@@ -161,6 +162,34 @@ func (g *Gossiper) postFileToIndexHandler(writer http.ResponseWriter, request *h
 	filename := request.Form.Get("Filename")
 
 	hash, err := g.data.addFile(filepath.Join(common.SharedFilesFolder, filename))
+	if err != nil {
+		writeErrorToHTTP(writer, err)
+		fmt.Println(err.Error())
+	}
+	hexHash, _ := json.Marshal(hex.EncodeToString(hash))
+	_, err = writer.Write(hexHash)
+	if err != nil {
+		fmt.Println(err.Error())
+	}
+}
+
+func (g *Gossiper) postFileToDownload(writer http.ResponseWriter, request *http.Request) {
+	err := request.ParseForm()
+	if err != nil {
+		fmt.Println(err.Error())
+		writeErrorToHTTP(writer, err)
+	}
+	filename := request.Form.Get("Filename")
+	user := request.Form.Get("User")
+	metafileHash := request.Form.Get("HashValue")
+
+	hash, err := hex.DecodeString(metafileHash)
+	if err != nil {
+		writeErrorToHTTP(writer, err)
+		fmt.Println(err.Error())
+	}
+
+	err = g.downloadFile(user, hash, filename)
 	if err != nil {
 		writeErrorToHTTP(writer, err)
 		fmt.Println(err.Error())

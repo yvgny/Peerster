@@ -32,17 +32,17 @@
     </div>
 </div>
 
-<div class="modal" tabindex="-1" role="dialog" id="modal-alert">
-    <div class="modal-dialog modal-dialog-centered modal-lg" role="document">
+<div class="modal fade" tabindex="-1" role="dialog" id="modal-alert">
+    <div class="modal-dialog modal-dialog-centered" role="document">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title" id="modal-alert-title">Modal title</h5>
+                <h5 class="modal-title" id="modal-alert-title"></h5>
                 <button type="button" class="close" data-dismiss="modal" aria-label="Close">
                     <span aria-hidden="true">&times;</span>
                 </button>
             </div>
             <div class="modal-body">
-                <p id="modal-alert-body">Modal body text goes here.</p>
+                <p id="modal-alert-body"></p>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-primary" data-dismiss="modal">Close</button>
@@ -59,37 +59,66 @@
         <div class="col-1">
         </div>
         <div class="col mt-2">
-            <h3>Peers</h3>
-            <table class="table table-striped table-bordered table-hover">
-                <thead>
-                <tr>
-                    <th>Address</th>
-                    <th>Port</th>
-                </tr>
-                </thead>
-                <tbody id="peers-table">
-                <tr id="peers-table-last-elem">
-                    <form id="new-node-form">
-                        <td><input type="text" placeholder="127.0.0.1" class="form-control" id="ip-form"></td>
-                        <td class="inline-content">
-                            <input type="text" placeholder="5000" class="form-control" id="port-form">
-                            <button type="submit" class="btn btn-primary ml-2">Add</button>
-                        </td>
-                    </form>
-                </tr>
-                </tbody>
-            </table>
-            <h3>File upload</h3>
-            <div class="alert alert-warning mt-2">
-                <strong>Watch out!</strong> Your file sould be placed in <i>_SharedFilesFolder</i>.
+            <div>
+                <h3>Peers</h3>
+                <table class="table table-striped table-bordered table-hover">
+                    <thead>
+                    <tr>
+                        <th>Address</th>
+                        <th>Port</th>
+                    </tr>
+                    </thead>
+                    <tbody id="peers-table">
+                    <tr id="peers-table-last-elem">
+                        <form id="new-node-form">
+                            <td><input type="text" placeholder="127.0.0.1" class="form-control" id="ip-form"></td>
+                            <td class="inline-content">
+                                <input type="text" placeholder="5000" class="form-control" id="port-form">
+                                <button type="submit" class="btn btn-primary ml-2">Add</button>
+                            </td>
+                        </form>
+                    </tr>
+                    </tbody>
+                </table>
             </div>
-            <form class="inline-content" id="index-file-form">
-                <div class="custom-file">
-                    <input type="file" class="custom-file-input" id="customFile">
-                    <label class="custom-file-label" for="customFile" id="filename">Choose file</label>
+            <div>
+                <h3>File upload</h3>
+                <div class="alert alert-warning mt-2">
+                    <strong>Watch out!</strong> Your file sould be placed in <i>_SharedFilesFolder</i>.
                 </div>
-                <button type="submit" class="btn btn-primary ml-2">Index</button>
-            </form>
+                <form class="inline-content" id="index-file-form">
+                    <div class="custom-file">
+                        <input type="file" class="custom-file-input" id="customFile">
+                        <label class="custom-file-label" for="customFile" id="filename">Choose file</label>
+                    </div>
+                    <button type="submit" class="btn btn-primary ml-2">Index</button>
+                </form>
+            </div>
+            <div class="mt-4">
+                <h3>File Download</h3>
+                <div class="alert alert-info mt-2">
+                    Your file will be saved in <i>_Downloads</i>.
+                </div>
+                <form id="file-download-form">
+                    <div class="inline-content">
+                        <div class="form-group">
+                            <label for="file-download-host-id">User ID</label>
+                            <input type="text" class="form-control" id="file-download-host-id" placeholder="John Doe">
+                        </div>
+                        <div class="form-group">
+                            <label for="file-download-filename">File name</label>
+                            <input type="text" class="form-control" id="file-download-filename"
+                                   placeholder="HelloWorld.txt">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="file-download-file-id">MetaFile Hash Value</label>
+                        <input type="text" class="form-control" id="file-download-file-id"
+                               placeholder="aa58b21b01d6b8a99c1a5856962dbac36c758a79dc0a77c2e013ce2c39ecdc8a">
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-block">Download</button>
+                </form>
+            </div>
         </div>
         <div class="col mt-2">
             <h3>Messages</h3>
