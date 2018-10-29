@@ -11,6 +11,7 @@ let idURL = window.location.origin + "/id";
 let nodeURL = window.location.origin + "/node";
 let contactsURL = window.location.origin + "/contacts";
 let pmURL = window.location.origin + "/private-message";
+let indexFileURL = window.location.origin + "/index-file";
 
 // configure the DOM once it's fully loaded
 $(document).ready(function () {
@@ -31,6 +32,8 @@ $(document).ready(function () {
         $.post(messageURL, {Message: msg}, function () {
             // handle succes
             $("#msg").val("")
+        }).fail(function (xhr) {
+            showModalAlert("Unable to send new message: " + xhr.responseText, true)
         })
     });
 
@@ -43,10 +46,12 @@ $(document).ready(function () {
             // handle succes
             $("#ip-form").val("");
             $("#port-form").val("")
+        }).fail(function (xhr) {
+            showModalAlert("Unable to add new node: " + xhr.responseText, true)
         })
     });
 
-    // Configure private message double click event
+    // Configure private message click event
     $('#contacts-table tbody').on('click', 'tr td', function () {
         let dest = $(this).text();
         $('#modal-pm-title').text(dest);
@@ -56,10 +61,33 @@ $(document).ready(function () {
             $.post(pmURL, {Destination: dest, Text:msgText}, function () {
                 $('#pm-text').val("");
                 $('#modal-private-message').modal('hide')
+            }).fail(function (xhr) {
+                showModalAlert("Unable to send private message: " + xhr.responseText, true)
             })
         });
         $('#modal-private-message').modal('show');
     });
+
+    // Configure file indexing
+    $('#index-file-form').submit(function (e) {
+        e.preventDefault();
+        let filename = $('#filename').text();
+        $.post(indexFileURL, {Filename: filename}, function (data) {
+            // handle success
+            $('#filename').text("Choose file");
+            let ID = JSON.parse(data);
+            showModalAlert("Your file is now indexed in Peerster with ID " + ID + "!", false)
+        }).fail(function (xhr) {
+            showModalAlert("Unable to index file: " + xhr.responseText, true)
+        })
+    });
+
+    // Update file name in file chooser box
+    $('#customFile').on('change', function () {
+        let fullpath = $('#customFile').val();
+        let filename = fullpath.replace(/^.*[\\\/]/, '');
+        $('#filename').text(filename)
+    })
 });
 
 // poll for new nodes on the gossiper
@@ -168,4 +196,10 @@ function addPeerPanel(peer) {
             <a class="nav-link ${first}" data-toggle="tab" href="#${peerID}">${peer}</a>
         </li>
     `)
+}
+
+function showModalAlert(text, error) {
+    $('#modal-alert-title').text(error ? "Error" : "Success!");
+    $('#modal-alert-body').text(text);
+    $('#modal-alert').modal('show')
 }

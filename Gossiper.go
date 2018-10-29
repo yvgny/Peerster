@@ -24,21 +24,21 @@ const DownloadFolder = "_Downloads"
 const MaxChunkDownloadRetryLimit = 10
 
 type Gossiper struct {
-	clientAddress *net.UDPAddr
-	gossipAddress *net.UDPAddr
-	clientConn    *net.UDPConn
-	gossipConn    *net.UDPConn
-	name          string
-	rtimer        int
-	peers         *common.ConcurrentSet
-	clocks        *sync.Map
-	waitAck       *sync.Map
-	waitData      *sync.Map
-	messages      *sync.Map
-	data          *DataManager
-	routingTable  *RoutingTable
-	simple        bool
-	mutex         sync.Mutex
+	clientAddress          *net.UDPAddr
+	gossipAddress          *net.UDPAddr
+	clientConn             *net.UDPConn
+	gossipConn             *net.UDPConn
+	name                   string
+	rtimer                 int
+	peers                  *common.ConcurrentSet
+	clocks                 *sync.Map
+	waitAck                *sync.Map
+	waitData               *sync.Map
+	messages               *sync.Map
+	data                   *DataManager
+	routingTable           *RoutingTable
+	simple                 bool
+	mutex                  sync.Mutex
 }
 
 func NewGossiper(clientAddress, gossipAddress, name, peers string, simpleBroadcastMode bool, rtimer int) (*Gossiper, error) {
@@ -88,7 +88,6 @@ func NewGossiper(clientAddress, gossipAddress, name, peers string, simpleBroadca
 		simple:        simpleBroadcastMode,
 	}
 
-	// TODO remttre tout ca
 	g.startAntiEntropy(time.Duration(AntiEntropyPeriod) * time.Second)
 
 	g.startRouteRumoring(time.Duration(rtimer) * time.Second)

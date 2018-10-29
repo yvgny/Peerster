@@ -1,11 +1,13 @@
 package main
 
 import (
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"github.com/gorilla/mux"
 	"github.com/yvgny/Peerster/common"
 	"net/http"
+	"path/filepath"
 	"time"
 )
 
@@ -32,6 +34,7 @@ func NewWebServer(g *Gossiper) *WebServer {
 	r.HandleFunc("/message", g.getMessagesHandler).Methods("GET")
 	r.HandleFunc("/message", g.postMessageHandler).Methods("POST")
 	r.HandleFunc("/private-message", g.postPrivateMessageHandler).Methods("POST")
+	r.HandleFunc("/index-file", g.postFileToIndexHandler).Methods("POST")
 	r.HandleFunc("/node", g.getNodesHandler).Methods("GET")
 	r.HandleFunc("/node", g.addNodeHandler).Methods("POST")
 	r.HandleFunc("/contacts", g.getContactsHandler).Methods("GET")
@@ -121,7 +124,7 @@ func (g *Gossiper) addNodeHandler(writer http.ResponseWriter, request *http.Requ
 	err := request.ParseForm()
 	if err != nil {
 		fmt.Println(err.Error())
-		http.Error(writer, err.Error(), 500)
+		writeErrorToHTTP(writer, err)
 	}
 	nodeIP := request.Form.Get("IP")
 	port := request.Form.Get("Port")
@@ -129,7 +132,7 @@ func (g *Gossiper) addNodeHandler(writer http.ResponseWriter, request *http.Requ
 	err = g.AddPeer(nodeIP + ":" + port)
 	if err != nil {
 		fmt.Println(err.Error())
-		http.Error(writer, err.Error(), 500)
+		writeErrorToHTTP(writer, err)
 	}
 }
 
@@ -137,7 +140,7 @@ func (g *Gossiper) postPrivateMessageHandler(writer http.ResponseWriter, request
 	err := request.ParseForm()
 	if err != nil {
 		fmt.Println(err.Error())
-		http.Error(writer, err.Error(), 500)
+		writeErrorToHTTP(writer, err)
 	}
 	messsage := request.Form.Get("Text")
 	dest := request.Form.Get("Destination")
@@ -149,11 +152,31 @@ func (g *Gossiper) postPrivateMessageHandler(writer http.ResponseWriter, request
 	}
 }
 
+func (g *Gossiper) postFileToIndexHandler(writer http.ResponseWriter, request *http.Request) {
+	err := request.ParseForm()
+	if err != nil {
+		fmt.Println(err.Error())
+		writeErrorToHTTP(writer, err)
+	}
+	filename := request.Form.Get("Filename")
+
+	hash, err := g.data.addFile(filepath.Join(common.SharedFilesFolder, filename))
+	if err != nil {
+		writeErrorToHTTP(writer, err)
+		fmt.Println(err.Error())
+	}
+	hexHash, _ := json.Marshal(hex.EncodeToString(hash))
+	_, err = writer.Write(hexHash)
+	if err != nil {
+		fmt.Println(err.Error())
+	}
+}
+
 func (g *Gossiper) postMessageHandler(writer http.ResponseWriter, request *http.Request) {
 	err := request.ParseForm()
 	if err != nil {
 		fmt.Println(err.Error())
-		http.Error(writer, err.Error(), 500)
+		writeErrorToHTTP(writer, err)
 	}
 	messsage := request.Form.Get("Message")
 	rumor := common.RumorMessage{
