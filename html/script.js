@@ -88,7 +88,7 @@ $(document).ready(function () {
         let fullpath = $('#customFile').val();
         let filename = fullpath.replace(/^.*[\\\/]/, '');
         $('#filename').text(filename)
-    })
+    });
 
     // Configure file download box
     $('#file-download-form').submit(function (e) {
@@ -163,7 +163,8 @@ function pollNewContacts() {
                     addNewContact(contact)
                 }
             }
-        )
+        );
+        setTimeout(pollNewContacts, PERIOD);
     })
 }
 
