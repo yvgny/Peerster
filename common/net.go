@@ -2,14 +2,13 @@ package common
 
 import (
 	"errors"
-	"fmt"
 	"github.com/dedis/protobuf"
 	"net"
-	"runtime/debug"
 )
 
 const LocalAddress = "127.0.0.1"
 
+// Basic message type
 type SimpleMessage struct {
 	OriginalName string
 	Contents     string
@@ -63,13 +62,19 @@ type DataReply struct {
 	Data        []byte
 }
 
+// Packet exchanged between peers
 type GossipPacket struct {
-	Simple       *SimpleMessage
-	Rumor        *RumorMessage
-	Status       *StatusPacket
-	Private      *PrivateMessage
-	DataRequest  *DataRequest
-	DataReply    *DataReply
+	Simple      *SimpleMessage
+	Rumor       *RumorMessage
+	Status      *StatusPacket
+	Private     *PrivateMessage
+	DataRequest *DataRequest
+	DataReply   *DataReply
+}
+
+// Packet exchanged with the client
+type ClientPacket struct {
+	GossipPacket
 	FileIndex    *FileIndexPacket
 	FileDownload *FileDownloadPacket
 }
@@ -78,16 +83,12 @@ type GossipPacket struct {
 // If it is nil, a new connection is openend on a random port. If a connection is given,
 // it has to be unconnected. Thus, if the connection is opened using Dial, SendMessage
 // will throw an error
-func SendMessage(address string, packet *GossipPacket, conn *net.UDPConn) error {
+func SendMessage(address string, packet interface{}, conn *net.UDPConn) error {
 	udpAddr, err := net.ResolveUDPAddr("udp4", address)
 	if err != nil {
 		return errors.New("Cannot resolve peer address: " + err.Error())
 	}
 
-	if packet.Private != nil || packet.DataReply != nil || packet.DataRequest != nil {
-		fmt.Println("Cassé à ")
-		debug.PrintStack()
-	}
 	if conn == nil {
 		conn, err = net.ListenUDP("udp", nil)
 		if err != nil {

@@ -19,7 +19,7 @@ func main() {
 
 	flag.Parse()
 
-	packet := &common.GossipPacket{}
+	packet := &common.ClientPacket{}
 
 	privateMsg := *msgArg != "" && *destArg != "" && *fileArg == "" && *requestArg == ""
 	fileUpload := *msgArg == "" && *destArg == "" && *fileArg != "" && *requestArg == ""

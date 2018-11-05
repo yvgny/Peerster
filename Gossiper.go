@@ -107,8 +107,8 @@ func (g *Gossiper) StartGossiper() {
 				fmt.Println(err.Error())
 				continue
 			}
-			gossipPacket := &common.GossipPacket{}
-			err = protobuf.Decode(buffer[:n], gossipPacket)
+			clientPacket := &common.ClientPacket{}
+			err = protobuf.Decode(buffer[:n], clientPacket)
 			if err != nil {
 				fmt.Println(err.Error())
 				continue
@@ -116,33 +116,35 @@ func (g *Gossiper) StartGossiper() {
 
 			// Handle the packet in a new thread to be able to listen on new messages again
 			go func() {
-				if gossipPacket.Rumor != nil {
-					if err = g.HandleClientMessage(gossipPacket); err != nil {
+				if clientPacket.Rumor != nil {
+					if err = g.HandleClientRumorMessage(clientPacket); err != nil {
 						fmt.Println(err.Error())
 					}
-				} else if gossipPacket.Simple != nil && g.simple {
-					output := fmt.Sprintf("CLIENT MESSAGE %s\n", gossipPacket.Simple.Contents)
+				} else if clientPacket.Simple != nil && g.simple {
+					output := fmt.Sprintf("CLIENT MESSAGE %s\n", clientPacket.Simple.Contents)
 					fmt.Println(output + g.peersString())
-					gossipPacket.Simple.OriginalName = g.name
+					gossipPacket := &common.GossipPacket{}
+					gossipPacket.Simple = clientPacket.Simple
+					clientPacket.Simple.OriginalName = g.name
 					errorList := common.BroadcastMessage(g.peers.Elements(), gossipPacket, nil, g.gossipConn)
 					if errorList != nil {
 						for _, err = range errorList {
 							fmt.Println(err.Error())
 						}
 					}
-				} else if packet := gossipPacket.Private; packet != nil {
+				} else if packet := clientPacket.Private; packet != nil {
 					err = g.sendPrivateMessage(packet.Destination, packet.Text)
 					if err != nil {
 						fmt.Println(err.Error())
 					}
-				} else if gossipPacket.FileIndex != nil {
-					hash, err := g.data.addFile(filepath.Join(common.SharedFilesFolder, gossipPacket.FileIndex.Filename))
+				} else if clientPacket.FileIndex != nil {
+					hash, err := g.data.addFile(filepath.Join(common.SharedFilesFolder, clientPacket.FileIndex.Filename))
 					if err != nil {
 						fmt.Println(err.Error())
 					}
-					fmt.Printf("Added new file from %s with hash %s\n", gossipPacket.FileIndex.Filename, hex.EncodeToString(hash))
-				} else if gossipPacket.FileDownload != nil {
-					err = g.downloadFile(gossipPacket.FileDownload.User, gossipPacket.FileDownload.HashValue, gossipPacket.FileDownload.Filename)
+					fmt.Printf("Added new file from %s with hash %s\n", clientPacket.FileIndex.Filename, hex.EncodeToString(hash))
+				} else if clientPacket.FileDownload != nil {
+					err = g.downloadFile(clientPacket.FileDownload.User, clientPacket.FileDownload.HashValue, clientPacket.FileDownload.Filename)
 					if err != nil {
 						fmt.Println(err.Error())
 					}
@@ -488,15 +490,17 @@ func (g *Gossiper) decrementClock(peer string) uint32 {
 	return currentClock
 }
 
-func (g *Gossiper) HandleClientMessage(packet *common.GossipPacket) error {
+func (g *Gossiper) HandleClientRumorMessage(packet *common.ClientPacket) error {
 	packet.Rumor.Origin = g.name
 	currentClock := g.incrementClock(g.name)
 	output := fmt.Sprintf("CLIENT MESSAGE %s\n", packet.Rumor.Text)
 	fmt.Println(output + g.peersString())
 	packet.Rumor.ID = currentClock
 	g.storeMessage(packet.Rumor)
+	gossipPacket := &common.GossipPacket{}
+	gossipPacket.Rumor = packet.Rumor
 
-	if err := g.startMongering(packet, nil, nil); err != nil {
+	if err := g.startMongering(gossipPacket, nil, nil); err != nil {
 		return err
 	}
 

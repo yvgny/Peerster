@@ -211,10 +211,9 @@ func (g *Gossiper) postMessageHandler(writer http.ResponseWriter, request *http.
 	rumor := common.RumorMessage{
 		Text: messsage,
 	}
-	gossip := common.GossipPacket{
-		Rumor: &rumor,
-	}
-	err = g.HandleClientMessage(&gossip)
+	clientPacket := common.ClientPacket{}
+	clientPacket.Rumor = &rumor
+	err = g.HandleClientRumorMessage(&clientPacket)
 	if err != nil {
 		writeErrorToHTTP(writer, err)
 		fmt.Println(err.Error())
