@@ -112,7 +112,7 @@ func SendMessage(address string, packet interface{}, conn *net.UDPConn) error {
 // Broadcast a message to a list of hosts. This uses SendMessage, so the connection can be nil
 // (please refer to the function SendMessage for more information). Also, an optional sender
 // can be specified. If it's the case, the message will be broadcast to every hosts except the sender
-func BroadcastMessage(hosts []string, message *GossipPacket, sender *string, conn *net.UDPConn) []error {
+func BroadcastMessage(hosts []string, message interface{}, sender *string, conn *net.UDPConn) []error {
 	errorList := make([]error, 0)
 	for _, host := range hosts {
 		if sender != nil && host == *sender {
