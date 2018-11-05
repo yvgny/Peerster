@@ -5,15 +5,22 @@ import (
 	"encoding/hex"
 	"errors"
 	"io"
+	"io/ioutil"
 	"os"
+	"path/filepath"
 	"sync"
 )
+
+const DataCacheFolder = ".peerster"
 
 type DataManager struct {
 	data sync.Map
 }
 
 func NewDataManager() *DataManager {
+	if _, err := os.Stat(DataCacheFolder); os.IsNotExist(err) {
+		os.Mkdir(DataCacheFolder, os.ModePerm)
+	}
 	return &DataManager{
 		data: sync.Map{},
 	}
@@ -46,13 +53,19 @@ func (dm *DataManager) addFile(path string) ([]byte, error) {
 
 		dataChunk := buffer[:bytesread]
 		chunkHash := sha256.Sum256(dataChunk)
-		copiedData := make([]byte, len(dataChunk))
-		copy(copiedData, dataChunk)
-		dm.data.Store(hex.EncodeToString(chunkHash[:]), copiedData)
+		filename := hex.EncodeToString(chunkHash[:])
+		err = ioutil.WriteFile(filepath.Join(DataCacheFolder, filename), dataChunk, os.ModePerm)
+		if err != nil {
+			return nil, err
+		}
 		metafile = append(metafile, chunkHash[:]...)
 	}
 	metafileHash := sha256.Sum256(metafile)
-	dm.data.Store(hex.EncodeToString(metafileHash[:]), metafile)
+	filename := hex.EncodeToString(metafileHash[:])
+	err = ioutil.WriteFile(filepath.Join(DataCacheFolder, filename), metafile, os.ModePerm)
+	if err != nil {
+		return nil, err
+	}
 
 	return metafileHash[:], nil
 }
@@ -66,23 +79,20 @@ func (dm *DataManager) addData(data, hash []byte) error {
 		return errors.New("provided hash does not match with hash computed from data")
 	}
 
-	copied := make([]byte, len(data))
-	copy(copied, data)
-
-	dm.data.Store(hash1, copied)
+	err := ioutil.WriteFile(filepath.Join(DataCacheFolder, hash1), data, os.ModePerm)
+	if err != nil {
+		return err
+	}
 
 	return nil
 }
 
-func (dm *DataManager) getData(hash []byte) ([]byte, bool) {
+func (dm *DataManager) getData(hash []byte) ([]byte, error) {
 	hashStr := hex.EncodeToString(hash)
-	rawData, ok := dm.data.Load(hashStr)
-	if !ok {
-		return nil, false
+	rawData, err := ioutil.ReadFile(filepath.Join(DataCacheFolder, hashStr))
+	if err != nil {
+		return nil, err
 	}
-	data := rawData.([]byte)
-	copied := make([]byte, len(data))
-	copy(copied, data)
 
-	return copied, true
+	return rawData, nil
 }

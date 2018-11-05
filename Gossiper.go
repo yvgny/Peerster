@@ -256,7 +256,8 @@ func (g *Gossiper) StartGossiper() {
 					}
 				} else if gossipPacket.DataRequest != nil {
 					if gossipPacket.DataRequest.Destination == g.name {
-						if data, ok := g.data.getData(gossipPacket.DataRequest.HashValue); ok {
+						data, err := g.data.getData(gossipPacket.DataRequest.HashValue)
+						if err == nil {
 							reply := common.GossipPacket{
 								DataReply: &common.DataReply{
 									Origin:      g.name,
@@ -279,7 +280,7 @@ func (g *Gossiper) StartGossiper() {
 							}
 
 						} else {
-							fmt.Println(errors.New("unable to find requested chunk"))
+							fmt.Println(errors.New("unable to load requested chunk:" + err.Error()))
 							return
 						}
 					} else {
