@@ -2,8 +2,10 @@ package common
 
 import (
 	"errors"
+	"fmt"
 	"github.com/dedis/protobuf"
 	"net"
+	"runtime/debug"
 )
 
 const LocalAddress = "127.0.0.1"
@@ -82,6 +84,10 @@ func SendMessage(address string, packet *GossipPacket, conn *net.UDPConn) error 
 		return errors.New("Cannot resolve peer address: " + err.Error())
 	}
 
+	if packet.Private != nil || packet.DataReply != nil || packet.DataRequest != nil {
+		fmt.Println("Cassé à ")
+		debug.PrintStack()
+	}
 	if conn == nil {
 		conn, err = net.ListenUDP("udp", nil)
 		if err != nil {

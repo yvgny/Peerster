@@ -19,26 +19,26 @@ const DefaultHopLimit uint32 = 10
 const DefaultUdpBufferSize int = 12228
 const DefaultChunkSize int = 8192
 const DataReplyTimeOut = 5 * time.Second
-const AntiEntropyPeriod int = 5
+const AntiEntropyPeriod int = 1
 const DownloadFolder = "_Downloads"
 const MaxChunkDownloadRetryLimit = 10
 
 type Gossiper struct {
-	clientAddress          *net.UDPAddr
-	gossipAddress          *net.UDPAddr
-	clientConn             *net.UDPConn
-	gossipConn             *net.UDPConn
-	name                   string
-	rtimer                 int
-	peers                  *common.ConcurrentSet
-	clocks                 *sync.Map
-	waitAck                *sync.Map
-	waitData               *sync.Map
-	messages               *sync.Map
-	data                   *DataManager
-	routingTable           *RoutingTable
-	simple                 bool
-	mutex                  sync.Mutex
+	clientAddress *net.UDPAddr
+	gossipAddress *net.UDPAddr
+	clientConn    *net.UDPConn
+	gossipConn    *net.UDPConn
+	name          string
+	rtimer        int
+	peers         *common.ConcurrentSet
+	clocks        *sync.Map
+	waitAck       *sync.Map
+	waitData      *sync.Map
+	messages      *sync.Map
+	data          *DataManager
+	routingTable  *RoutingTable
+	simple        bool
+	mutex         sync.Mutex
 }
 
 func NewGossiper(clientAddress, gossipAddress, name, peers string, simpleBroadcastMode bool, rtimer int) (*Gossiper, error) {
@@ -329,7 +329,7 @@ func (g *Gossiper) forwardPacket(packet *common.GossipPacket) error {
 
 	nexthop, ok := g.routingTable.getNextHop(dest)
 	if !ok {
-		return errors.New(fmt.Sprintf("cannot find next of for destination %s when forwarding the packet", dest))
+		return errors.New(fmt.Sprintf("cannot find next hop for destination %s when forwarding the packet", dest))
 	}
 
 	err := common.SendMessage(nexthop, packet, g.gossipConn)
@@ -471,7 +471,6 @@ func (g *Gossiper) incrementClock(peer string) uint32 {
 	currentClockInter, _ := g.clocks.LoadOrStore(g.name, uint32(1))
 	currentClock := currentClockInter.(uint32)
 	g.clocks.Store(g.name, currentClock+1)
-
 	return currentClock
 }
 
@@ -647,6 +646,26 @@ func (g *Gossiper) syncWithPeer(peer string, status *common.StatusPacket) (bool,
 			return true, nil
 		}
 	}
+
+	g.clocks.Range(func(peerVal, _ interface{}) bool {
+		peerID := peerVal.(string)
+		for _, peerStatus := range status.Want {
+			if peerStatus.Identifier == peerID {
+				return true
+			}
+		}
+		msg, loaded := g.getMessage(peerID, uint32(1))
+		if !loaded {
+			return true
+		}
+		gossipPack := common.GossipPacket{
+			Rumor: msg,
+		}
+		if err := g.startMongering(&gossipPack, &peer, nil); err != nil {
+			return true
+		}
+		return true
+	})
 
 	// Check if we are up to date by sending our current clocks status
 	for _, peerStatus := range status.Want {
