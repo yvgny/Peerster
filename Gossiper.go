@@ -24,21 +24,22 @@ const DownloadFolder = "_Downloads"
 const MaxChunkDownloadRetryLimit = 10
 
 type Gossiper struct {
-	clientAddress *net.UDPAddr
-	gossipAddress *net.UDPAddr
-	clientConn    *net.UDPConn
-	gossipConn    *net.UDPConn
-	name          string
-	rtimer        int
-	peers         *common.ConcurrentSet
-	clocks        *sync.Map
-	waitAck       *sync.Map
-	waitData      *sync.Map
-	messages      *sync.Map
-	data          *DataManager
-	routingTable  *RoutingTable
-	simple        bool
-	mutex         sync.Mutex
+	clientAddress   *net.UDPAddr
+	gossipAddress   *net.UDPAddr
+	clientConn      *net.UDPConn
+	gossipConn      *net.UDPConn
+	name            string
+	rtimer          int
+	peers           *common.ConcurrentSet
+	clocks          *sync.Map
+	waitAck         *sync.Map
+	waitData        *sync.Map
+	messages        *sync.Map
+	privateMessages *Mail
+	data            *DataManager
+	routingTable    *RoutingTable
+	simple          bool
+	mutex           sync.Mutex
 }
 
 func NewGossiper(clientAddress, gossipAddress, name, peers string, simpleBroadcastMode bool, rtimer int) (*Gossiper, error) {
@@ -72,20 +73,21 @@ func NewGossiper(clientAddress, gossipAddress, name, peers string, simpleBroadca
 	}
 
 	g := &Gossiper{
-		gossipAddress: gAddress,
-		clientAddress: cAddress,
-		clientConn:    cConn,
-		gossipConn:    gConn,
-		name:          name,
-		peers:         peersSet,
-		rtimer:        rtimer,
-		clocks:        &clocksMap,
-		waitAck:       &syncMap,
-		waitData:      &sync.Map{},
-		messages:      &messagesMap,
-		data:          NewDataManager(),
-		routingTable:  NewRoutingTable(),
-		simple:        simpleBroadcastMode,
+		gossipAddress:   gAddress,
+		clientAddress:   cAddress,
+		clientConn:      cConn,
+		gossipConn:      gConn,
+		name:            name,
+		peers:           peersSet,
+		rtimer:          rtimer,
+		clocks:          &clocksMap,
+		waitAck:         &syncMap,
+		waitData:        &sync.Map{},
+		messages:        &messagesMap,
+		privateMessages: newMail(),
+		data:            NewDataManager(),
+		routingTable:    NewRoutingTable(),
+		simple:          simpleBroadcastMode,
 	}
 
 	g.startAntiEntropy(time.Duration(AntiEntropyPeriod) * time.Second)
@@ -247,6 +249,7 @@ func (g *Gossiper) StartGossiper() {
 					packet := gossipPacket.Private
 					if packet.Destination == g.name {
 						fmt.Printf("PRIVATE origin %s hop-limit %d contents %s\n", packet.Origin, packet.HopLimit, packet.Text)
+						g.privateMessages.addMessage(packet.Origin, packet.Destination, packet.Text)
 					} else {
 						err = g.forwardPacket(gossipPacket)
 						if err != nil {
@@ -457,6 +460,8 @@ func (g *Gossiper) sendPrivateMessage(destination, text string) error {
 	gossipPacket := &common.GossipPacket{
 		Private: packet,
 	}
+
+	g.privateMessages.addMessage(g.name, destination, text)
 
 	if hop, ok := g.routingTable.getNextHop(packet.Destination); ok {
 		if err := common.SendMessage(hop, gossipPacket, g.gossipConn); err != nil {

@@ -1,6 +1,9 @@
 "use strict";
 
 let msgIDs = new Set();
+let privateMsgs = [];
+let newPM = false;
+let dest = "";
 let peers = new Set();
 let nodes = new Set();
 let contacts = new Set();
@@ -13,6 +16,7 @@ let contactsURL = window.location.origin + "/contacts";
 let pmURL = window.location.origin + "/private-message";
 let indexFileURL = window.location.origin + "/index-file";
 let downloadFileURL = window.location.origin + "/download-file";
+let livePMupdates = false;
 
 // configure the DOM once it's fully loaded
 $(document).ready(function () {
@@ -25,6 +29,7 @@ $(document).ready(function () {
     pollNewMessages();
     pollNewNode();
     pollNewContacts();
+    pollNewPrivateMessages();
 
     // Configure message form
     $("#new-message-form").submit(function (e) {
@@ -54,19 +59,30 @@ $(document).ready(function () {
 
     // Configure private message click event
     $('#contacts-table tbody').on('click', 'tr td', function () {
-        let dest = $(this).text();
+        dest = $(this).text();
         $('#modal-pm-title').text(dest);
-        $('#btn-send-pm').off('click').click(function () {
+        $('#btn-send-pm').off('click').click(function (e) {
+            e.preventDefault();
             // Send the private message when button is clicked
             let msgText = $('#pm-text').val();
             $.post(pmURL, {Destination: dest, Text: msgText}, function () {
                 $('#pm-text').val("");
-                $('#modal-private-message').modal('hide')
             }).fail(function (xhr) {
                 showModalAlert("Unable to send private message: " + xhr.responseText, true)
             })
         });
-        $('#modal-private-message').modal('show');
+        $('#modal-private-message')
+            .modal('show')
+            .on('shown.bs.modal', function () {
+                livePMupdates = true;
+                liveSyncPM(true);
+                // Scroll to the bottom
+                scrollToBottom("private-messages-list");
+            })
+            .on('hide.bs.modal', function () {
+                livePMupdates = false;
+                $('#private-messages-list').empty()
+            });
     });
 
     // Configure file indexing
@@ -131,9 +147,7 @@ function pollNewNode() {
 // poll for new messages on the gossiper
 function pollNewMessages() {
     $.getJSON(messageURL, function (data) {
-        data.sort(function (msg1, msg2) {
-            return msg1.ID - msg2.ID
-        }).forEach(msg => {
+        data.forEach(msg => {
             if (!msgIDs.has(generateUniqueID(msg))) {
                 if (!peers.has(msg.Origin)) {
                     addPeerPanel(msg.Origin);
@@ -142,6 +156,17 @@ function pollNewMessages() {
             }
         });
         setTimeout(pollNewMessages, PERIOD);
+    });
+}
+
+// poll for new private messages on the gossiper
+function pollNewPrivateMessages() {
+    $.getJSON(pmURL, function (data) {
+        if (data.length > privateMsgs.length) {
+            newPM = true
+        }
+        privateMsgs = data;
+        setTimeout(pollNewPrivateMessages);
     });
 }
 
@@ -166,6 +191,37 @@ function pollNewContacts() {
         );
         setTimeout(pollNewContacts, PERIOD);
     })
+}
+
+function liveSyncPM(forceUpdate) {
+    if (!livePMupdates) {
+        return
+    }
+    if (newPM || forceUpdate) {
+        newPM = false;
+        $('#private-messages-list').empty();
+        addPrivateMessagesWith(dest);
+        // Scroll to the bottom
+        scrollToBottom("private-messages-list");
+    }
+    setTimeout(function () {
+        liveSyncPM(false)
+    }, PERIOD)
+}
+
+function addPrivateMessagesWith(dest) {
+    privateMsgs.filter(msg => {
+        return msg.From === dest || msg.To === dest;
+    }).forEach(msg => {
+        $('#private-messages-list').append(`
+            <div class="card m-3" ${msg.From === ID ? "style=\"text-align: right\"" : ""}>
+                <div class="card-body">
+                    <h6 class="card-title">${msg.From === ID ? "You" : msg.From}</h6>
+                    <p class="card-text">${msg.Text}</p>
+                </div>
+            </div>
+        `)
+    });
 }
 
 function addNewContact(contact) {
@@ -221,4 +277,9 @@ function showModalAlert(text, error) {
     $('#modal-alert-title').text(error ? "Error" : "Success!");
     $('#modal-alert-body').text(text);
     $('#modal-alert').modal('show')
+}
+
+function scrollToBottom(id) {
+    let div = document.getElementById(id);
+    div.scrollTop = div.scrollHeight - div.clientHeight;
 }

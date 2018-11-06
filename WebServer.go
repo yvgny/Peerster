@@ -34,6 +34,7 @@ func NewWebServer(g *Gossiper) *WebServer {
 	r.HandleFunc("/message", g.getMessagesHandler).Methods("GET")
 	r.HandleFunc("/message", g.postMessageHandler).Methods("POST")
 	r.HandleFunc("/private-message", g.postPrivateMessageHandler).Methods("POST")
+	r.HandleFunc("/private-message", g.getPrivateMessagesHandler).Methods("GET")
 	r.HandleFunc("/index-file", g.postFileToIndexHandler).Methods("POST")
 	r.HandleFunc("/download-file", g.postFileToDownload).Methods("POST")
 	r.HandleFunc("/node", g.getNodesHandler).Methods("GET")
@@ -107,6 +108,23 @@ func (g *Gossiper) getContactsHandler(writer http.ResponseWriter, request *http.
 	msg := Contacts{
 		Contacts: g.routingTable.Elements(),
 	}
+
+	bytes, err := json.Marshal(msg)
+	if err == nil {
+		_, err = writer.Write(bytes)
+		if err != nil {
+			writeErrorToHTTP(writer, err)
+			fmt.Println(err.Error())
+		}
+	} else {
+		writeErrorToHTTP(writer, err)
+		fmt.Println(err.Error())
+	}
+}
+func (g *Gossiper) getPrivateMessagesHandler(writer http.ResponseWriter, request *http.Request) {
+	writer.Header().Set("Content-Type", "application/json")
+
+	msg := g.privateMessages.Elements()
 
 	bytes, err := json.Marshal(msg)
 	if err == nil {
