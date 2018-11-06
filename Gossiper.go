@@ -590,7 +590,8 @@ func (g *Gossiper) startMongering(gossipPacket *common.GossipPacket, host *strin
 			i += 1
 		}
 		if toHost == lastHostVal {
-			return errors.New("unable to find a new peer to monger with (last host is " + lastHostVal + ")")
+			// unable to find a new peer to monger with
+			return nil
 		}
 	}
 	if lastHost != nil {

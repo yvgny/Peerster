@@ -166,7 +166,7 @@ function pollNewPrivateMessages() {
             newPM = true
         }
         privateMsgs = data;
-        setTimeout(pollNewPrivateMessages);
+        setTimeout(pollNewPrivateMessages, PERIOD);
     });
 }
 
@@ -216,7 +216,7 @@ function addPrivateMessagesWith(dest) {
         $('#private-messages-list').append(`
             <div class="card m-3" ${msg.From === ID ? "style=\"text-align: right\"" : ""}>
                 <div class="card-body">
-                    <h6 class="card-title">${msg.From === ID ? "You" : msg.From}</h6>
+                    <h5 class="card-title">${msg.From === ID ? "You" : msg.From}</h5>
                     <p class="card-text">${msg.Text}</p>
                 </div>
             </div>
