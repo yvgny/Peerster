@@ -1,4 +1,4 @@
-package main
+package gossiper
 
 import (
 	"crypto/sha256"

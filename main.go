@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"github.com/yvgny/Peerster/common"
+	"github.com/yvgny/Peerster/gossiper"
 	"os"
 	"sync"
 )
@@ -20,20 +21,20 @@ func main() {
 	flag.Parse()
 	fmt.Printf("UIPort = %s, gossipAddr = %s, name = %s, peers = %s, broadcastEnabled = %t\n", *uiPortArg, *gossipAddressArg, *nameArg, *peersArg, *broadcastModeArg)
 
-	gossiper, err := NewGossiper(common.LocalAddress+":"+*uiPortArg, *gossipAddressArg, *nameArg, *peersArg, *broadcastModeArg, *rtimer)
+	goss, err := gossiper.NewGossiper(common.LocalAddress+":"+*uiPortArg, *gossipAddressArg, *nameArg, *peersArg, *broadcastModeArg, *rtimer)
 	if err != nil {
 		fmt.Println(err.Error())
 		os.Exit(1)
 	}
 
-	var ws *WebServer
+	var ws *gossiper.WebServer
 
 	if *wsArg {
-		ws = NewWebServer(gossiper)
+		ws = gossiper.NewWebServer(goss)
 		ws.StartWebServer()
 	}
 
-	gossiper.StartGossiper()
+	goss.StartGossiper()
 
 	// Let the server run
 	wg := &sync.WaitGroup{}

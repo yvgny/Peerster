@@ -1,4 +1,4 @@
-package main
+package gossiper
 
 import (
 	"encoding/hex"

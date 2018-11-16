@@ -1,4 +1,4 @@
-package main
+package gossiper
 
 import (
 	"crypto/sha256"
@@ -203,14 +203,6 @@ func (g *Gossiper) StartGossiper() {
 							fmt.Println(err.Error())
 							return
 						}
-					} else {
-						/*
-						fmt.Println("should not happen")
-						// Message ID was probably too high : trying to update
-						if err = g.sendStatusPacket(addr.String()); err != nil {
-							fmt.Println(err.Error())
-							return
-						}*/
 					}
 				} else if gossipPacket.Status != nil {
 					output := fmt.Sprintf("STATUS from %s", addr)
