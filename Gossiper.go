@@ -183,12 +183,15 @@ func (g *Gossiper) StartGossiper() {
 					}
 
 					if g.isNewValidMessage(gossipPacket.Rumor) {
+						//g.incrementClock(gossipPacket.Rumor.Origin)
 						g.clocks.Store(gossipPacket.Rumor.Origin, gossipPacket.Rumor.ID+1)
 						g.storeMessage(gossipPacket.Rumor)
 
 						// Update DSDV table
-						g.routingTable.updateRoute(gossipPacket.Rumor.Origin, addr.String())
-						fmt.Printf("DSDV %s %s\n", gossipPacket.Rumor.Origin, addr.String())
+						if gossipPacket.Rumor.Origin != g.name {
+							g.routingTable.updateRoute(gossipPacket.Rumor.Origin, addr.String())
+							fmt.Printf("DSDV %s %s\n", gossipPacket.Rumor.Origin, addr.String())
+						}
 
 						// Send ack
 						if err = g.sendStatusPacket(addr.String()); err != nil {
@@ -201,11 +204,13 @@ func (g *Gossiper) StartGossiper() {
 							return
 						}
 					} else {
+						/*
+						fmt.Println("should not happen")
 						// Message ID was probably too high : trying to update
 						if err = g.sendStatusPacket(addr.String()); err != nil {
 							fmt.Println(err.Error())
 							return
-						}
+						}*/
 					}
 				} else if gossipPacket.Status != nil {
 					output := fmt.Sprintf("STATUS from %s", addr)
@@ -540,25 +545,25 @@ func (g *Gossiper) startAntiEntropy(period time.Duration) {
 }
 
 func (g *Gossiper) startRouteRumoring(period time.Duration) {
-	routeMsg := common.GossipPacket{
-		Rumor: &common.RumorMessage{
-			Origin: g.name,
-		},
-	}
-	sendMsg := func() {
-		routeMsg.Rumor.ID = g.incrementClock(g.name)
-		for _, host := range g.peers.Elements() {
-			if err := common.SendMessage(host, &routeMsg, g.gossipConn); err != nil {
-				fmt.Println(err.Error())
-			}
-		}
-		g.storeMessage(routeMsg.Rumor)
-	}
-	// Send a first announcement
-	sendMsg()
-
-	// If enabled, announce periodically
 	if period > 0 {
+		routeMsg := common.GossipPacket{
+			Rumor: &common.RumorMessage{
+				Origin: g.name,
+			},
+		}
+		sendMsg := func() {
+			routeMsg.Rumor.ID = g.incrementClock(g.name)
+			for _, host := range g.peers.Elements() {
+				if err := common.SendMessage(host, &routeMsg, g.gossipConn); err != nil {
+					fmt.Println(err.Error())
+				}
+			}
+			g.storeMessage(routeMsg.Rumor)
+		}
+		// Send a first announcement
+		sendMsg()
+
+		// Then at each period
 		go func() {
 			ticker := time.NewTicker(period)
 			for range ticker.C {
@@ -658,6 +663,7 @@ func (g *Gossiper) syncWithPeer(peer string, status *common.StatusPacket) (bool,
 		}
 	}
 
+	neededUpdate := false
 	g.clocks.Range(func(peerVal, _ interface{}) bool {
 		peerID := peerVal.(string)
 		for _, peerStatus := range status.Want {
@@ -673,10 +679,15 @@ func (g *Gossiper) syncWithPeer(peer string, status *common.StatusPacket) (bool,
 			Rumor: msg,
 		}
 		if err := g.startMongering(&gossipPack, &peer, nil); err != nil {
-			return true
+			neededUpdate = true
+			return false
 		}
 		return true
 	})
+
+	if neededUpdate {
+		return true, nil
+	}
 
 	// Check if we are up to date by sending our current clocks status
 	for _, peerStatus := range status.Want {
