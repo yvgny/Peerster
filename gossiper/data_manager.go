@@ -4,10 +4,12 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"github.com/yvgny/Peerster/common"
 	"io"
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 )
 
@@ -18,8 +20,10 @@ type DataManager struct {
 }
 
 type FileMetaData struct {
-	name string
-	size int64
+	Name       string
+	ChunkMap   []uint64
+	MetaHash   string
+	ChunkCount uint64
 }
 
 func NewDataManager() *DataManager {
@@ -46,6 +50,8 @@ func (dm *DataManager) addFile(path string) ([]byte, error) {
 
 	metafile := make([]byte, 0)
 
+	chunkMap := make([]uint64, 0)
+	chunkCount := uint64(1)
 	for {
 		bytesread, err := file.Read(buffer)
 		if err != nil {
@@ -63,6 +69,11 @@ func (dm *DataManager) addFile(path string) ([]byte, error) {
 		if err != nil {
 			return nil, err
 		}
+
+		// Add this chunk to the available chunk
+		chunkMap = append(chunkMap, chunkCount)
+		chunkCount++
+
 		metafile = append(metafile, chunkHash[:]...)
 	}
 	metafileHash := sha256.Sum256(metafile)
@@ -72,12 +83,7 @@ func (dm *DataManager) addFile(path string) ([]byte, error) {
 		return nil, err
 	}
 
-	fs, err := file.Stat()
-	if err != nil {
-		return nil, err
-	}
-
-	dm.addRecord(filename, file.Name(), fs.Size())
+	dm.addRecord(filename, file.Name(), chunkMap, chunkCount)
 
 	return metafileHash[:], nil
 }
@@ -99,10 +105,12 @@ func (dm *DataManager) addData(data, hash []byte) error {
 	return nil
 }
 
-func (dm *DataManager) addRecord(hash, filename string, size int64) {
+func (dm *DataManager) addRecord(hash, filename string, chunckMap []uint64, chunkCount uint64) {
 	md := FileMetaData{
-		name: filename,
-		size: size,
+		Name:       filename,
+		ChunkMap:   chunckMap,
+		MetaHash:   hash,
+		ChunkCount: chunkCount,
 	}
 
 	dm.records.Store(hash, md)
@@ -126,4 +134,29 @@ func (dm *DataManager) getData(hash []byte) ([]byte, error) {
 	}
 
 	return rawData, nil
+}
+
+func (dm *DataManager) SearchFile(keywords []string) []*common.SearchResult {
+	results := make([]*common.SearchResult, 0)
+	dm.records.Range(func(hash, metadataRaw interface{}) bool {
+		metadata := metadataRaw.(FileMetaData)
+		for _, keyword := range keywords {
+			if strings.Contains(metadata.Name, keyword) {
+				hashByte, err := hex.DecodeString(metadata.MetaHash)
+				if err != nil {
+					return true
+				}
+				sr := common.SearchResult{
+					FileName:     metadata.Name,
+					MetafileHash: hashByte,
+					ChunkMap:     metadata.ChunkMap,
+				}
+				results = append(results, &sr)
+			}
+		}
+
+		return true
+	})
+
+	return results
 }

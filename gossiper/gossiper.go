@@ -392,8 +392,10 @@ func (g *Gossiper) downloadFile(user string, hash []byte, filename string) error
 					fmt.Println(err)
 					return
 				}
+				chunkList := make([]uint64, 0)
 				// get every chunk
 				for i := 0; i < len(metafile); i += sha256.Size {
+					chunkNr := uint64(i/sha256.Size + 1)
 					packet.DataRequest.HashValue = metafile[i : i+sha256.Size]
 					chunckHex := hex.EncodeToString(packet.DataRequest.HashValue)
 					g.waitData.Store(chunckHex, &replyChan)
@@ -424,6 +426,7 @@ func (g *Gossiper) downloadFile(user string, hash []byte, filename string) error
 							if err != nil {
 								fmt.Println(errors.New("Unable to write in file: " + err.Error()))
 							}
+							chunkList = append(chunkList, chunkNr)
 							break loop
 						case <-timer.C:
 						}
@@ -433,7 +436,7 @@ func (g *Gossiper) downloadFile(user string, hash []byte, filename string) error
 
 				f.Sync()
 				f.Close()
-
+				g.data.addRecord(metafileHash, filename, chunkList, uint64(len(metafile)/sha256.Size))
 				fmt.Printf("RECONSTRUCTED file %s\n", filename)
 
 				return

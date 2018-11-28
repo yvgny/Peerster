@@ -7,6 +7,7 @@ import (
 	"github.com/yvgny/Peerster/common"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 
@@ -16,15 +17,18 @@ func main() {
 	destArg := flag.String("dest", "", "destination for the private message")
 	fileArg := flag.String("file", "", "file to be indexed by the gossiper, or filename of the requested file")
 	requestArg := flag.String("request", "", "request a chunk or metafile of this hash")
-
+	keywordsArg := flag.String("keywords", "", "search a file by keywords")
+	budgetArg := flag.Int("budget", 0, "budget allowed for the expanding-ring search")
 	flag.Parse()
 
 	packet := &common.ClientPacket{}
 
-	privateMsg := *msgArg != "" && *destArg != "" && *fileArg == "" && *requestArg == ""
-	fileUpload := *msgArg == "" && *destArg == "" && *fileArg != "" && *requestArg == ""
-	rumorMsg := *msgArg != "" && *destArg == "" && *fileArg == "" && *requestArg == ""
-	fileRequestMsg := *msgArg == "" && *destArg != "" && *fileArg != "" && *requestArg != ""
+	privateMsg := *msgArg != "" && *destArg != "" && *fileArg == "" && *requestArg == "" && *keywordsArg == ""
+	fileUpload := *msgArg == "" && *destArg == "" && *fileArg != "" && *requestArg == "" && *keywordsArg == ""
+	rumorMsg := *msgArg != "" && *destArg == "" && *fileArg == "" && *requestArg == "" && *keywordsArg == ""
+	fileRequestMsg := *msgArg == "" && *destArg != "" && *fileArg != "" && *requestArg != "" && *keywordsArg == ""
+	fileSearch := *msgArg == "" && *destArg == "" && *fileArg == "" && *requestArg == "" && *keywordsArg != ""
+
 
 	if privateMsg {
 		packet.Private = &common.PrivateMessage{
@@ -56,6 +60,13 @@ func main() {
 			HashValue: hash,
 			Filename:  *fileArg,
 		}
+	} else if fileSearch {
+		keywords := strings.Split(*keywordsArg, ",")
+		searchRequest := common.SearchRequest{
+			Budget:uint64(*budgetArg),
+			Keywords:keywords,
+		}
+		packet.SearchRequest = &searchRequest
 	} else {
 		fmt.Println("Error: combination of given arguments doesn't corresponds to any action")
 		os.Exit(1)
