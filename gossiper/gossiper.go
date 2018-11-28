@@ -24,22 +24,23 @@ const DownloadFolder = "_Downloads"
 const MaxChunkDownloadRetryLimit = 10
 
 type Gossiper struct {
-	clientAddress   *net.UDPAddr
-	gossipAddress   *net.UDPAddr
-	clientConn      *net.UDPConn
-	gossipConn      *net.UDPConn
-	name            string
-	rtimer          int
-	peers           *common.ConcurrentSet
-	clocks          *sync.Map
-	waitAck         *sync.Map
-	waitData        *sync.Map
-	messages        *sync.Map
-	privateMessages *Mail
-	data            *DataManager
-	routingTable    *RoutingTable
-	simple          bool
-	mutex           sync.Mutex
+	clientAddress     *net.UDPAddr
+	gossipAddress     *net.UDPAddr
+	clientConn        *net.UDPConn
+	gossipConn        *net.UDPConn
+	name              string
+	rtimer            int
+	peers             *common.ConcurrentSet
+	clocks            *sync.Map
+	waitAck           *sync.Map
+	waitData          *sync.Map
+	waitSearchRequest *common.ConcurrentSet
+	messages          *sync.Map
+	privateMessages   *Mail
+	data              *DataManager
+	routingTable      *RoutingTable
+	simple            bool
+	mutex             sync.Mutex
 }
 
 func NewGossiper(clientAddress, gossipAddress, name, peers string, simpleBroadcastMode bool, rtimer int) (*Gossiper, error) {
@@ -73,21 +74,22 @@ func NewGossiper(clientAddress, gossipAddress, name, peers string, simpleBroadca
 	}
 
 	g := &Gossiper{
-		gossipAddress:   gAddress,
-		clientAddress:   cAddress,
-		clientConn:      cConn,
-		gossipConn:      gConn,
-		name:            name,
-		peers:           peersSet,
-		rtimer:          rtimer,
-		clocks:          &clocksMap,
-		waitAck:         &syncMap,
-		waitData:        &sync.Map{},
-		messages:        &messagesMap,
-		privateMessages: newMail(),
-		data:            NewDataManager(),
-		routingTable:    NewRoutingTable(),
-		simple:          simpleBroadcastMode,
+		gossipAddress:     gAddress,
+		clientAddress:     cAddress,
+		clientConn:        cConn,
+		gossipConn:        gConn,
+		name:              name,
+		peers:             peersSet,
+		rtimer:            rtimer,
+		clocks:            &clocksMap,
+		waitAck:           &syncMap,
+		waitData:          &sync.Map{},
+		waitSearchRequest: common.NewConcurrentSet(),
+		messages:          &messagesMap,
+		privateMessages:   newMail(),
+		data:              NewDataManager(),
+		routingTable:      NewRoutingTable(),
+		simple:            simpleBroadcastMode,
 	}
 
 	g.startAntiEntropy(time.Duration(AntiEntropyPeriod) * time.Second)
@@ -303,6 +305,12 @@ func (g *Gossiper) StartGossiper() {
 							fmt.Println(err.Error())
 							return
 						}
+					}
+				} else if gossipPacket.SearchRequest != nil {
+					err := g.processSearchRequest(gossipPacket, addr.String())
+					if err != nil {
+						fmt.Println(errors.New("error while processing search request: " + err.Error()))
+						return
 					}
 				}
 			}()

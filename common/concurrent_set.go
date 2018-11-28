@@ -65,3 +65,23 @@ func (cs *ConcurrentSet) Pick() (string, bool) {
 	}
 	return elem[rand.Intn(len(elem))], true
 }
+
+func (cs *ConcurrentSet) PickN(n int, except []string) ([]string, bool) {
+	elems := cs.Elements()
+	validElems := make([]string, 0)
+	for _, elem := range elems {
+		if !Contains(elem, except) {
+			validElems = append(validElems, elem)
+		}
+	}
+	if n > len(validElems) || n < 0 {
+		return nil, false
+	}
+	result := make([]string, n)
+	idx := rand.Perm(len(validElems))
+	for i := 0; i < n; i++ {
+		result[i] = validElems[idx[i]]
+	}
+
+	return result, true
+}

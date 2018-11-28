@@ -136,6 +136,7 @@ func (dm *DataManager) getData(hash []byte) ([]byte, error) {
 	return rawData, nil
 }
 
+// TODO return only unique result
 func (dm *DataManager) SearchFile(keywords []string) []*common.SearchResult {
 	results := make([]*common.SearchResult, 0)
 	dm.records.Range(func(hash, metadataRaw interface{}) bool {
