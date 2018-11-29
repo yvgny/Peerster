@@ -136,15 +136,15 @@ func (dm *DataManager) getData(hash []byte) ([]byte, error) {
 	return rawData, nil
 }
 
-// TODO return only unique result
 func (dm *DataManager) SearchFile(keywords []string) []*common.SearchResult {
 	results := make([]*common.SearchResult, 0)
+	hashList := make([]string, 0)
 	dm.records.Range(func(hash, metadataRaw interface{}) bool {
 		metadata := metadataRaw.(FileMetaData)
 		for _, keyword := range keywords {
 			if strings.Contains(metadata.Name, keyword) {
 				hashByte, err := hex.DecodeString(metadata.MetaHash)
-				if err != nil {
+				if err != nil || common.Contains(metadata.MetaHash, hashList){
 					return true
 				}
 				sr := common.SearchResult{
@@ -152,6 +152,7 @@ func (dm *DataManager) SearchFile(keywords []string) []*common.SearchResult {
 					MetafileHash: hashByte,
 					ChunkMap:     metadata.ChunkMap,
 				}
+				hashList = append(hashList, metadata.MetaHash)
 				results = append(results, &sr)
 			}
 		}
