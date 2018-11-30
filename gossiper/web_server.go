@@ -8,6 +8,8 @@ import (
 	"github.com/yvgny/Peerster/common"
 	"net/http"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"time"
 )
 
@@ -37,6 +39,8 @@ func NewWebServer(g *Gossiper) *WebServer {
 	r.HandleFunc("/private-message", g.getPrivateMessagesHandler).Methods("GET")
 	r.HandleFunc("/index-file", g.postFileToIndexHandler).Methods("POST")
 	r.HandleFunc("/download-file", g.postFileToDownload).Methods("POST")
+	r.HandleFunc("/search-file", g.postSearchForFile).Methods("POST")
+	r.HandleFunc("/matched-files", g.getMatchedFiles).Methods("GET")
 	r.HandleFunc("/node", g.getNodesHandler).Methods("GET")
 	r.HandleFunc("/node", g.addNodeHandler).Methods("POST")
 	r.HandleFunc("/contacts", g.getContactsHandler).Methods("GET")
@@ -82,6 +86,21 @@ func (g *Gossiper) idHandler(writer http.ResponseWriter, request *http.Request) 
 	}
 }
 
+func (g *Gossiper) getMatchedFiles(writer http.ResponseWriter, request *http.Request) {
+	writer.Header().Set("Content-Type", "application/json")
+
+	bytes, err := json.Marshal(g.data.getAllRemoteMatches())
+	if err == nil {
+		_, err = writer.Write(bytes)
+		if err != nil {
+			writeErrorToHTTP(writer, err)
+			fmt.Println(err.Error())
+		}
+	} else {
+		writeErrorToHTTP(writer, err)
+		fmt.Println(err.Error())
+	}
+}
 func (g *Gossiper) getNodesHandler(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Content-Type", "application/json")
 
@@ -155,6 +174,29 @@ func (g *Gossiper) addNodeHandler(writer http.ResponseWriter, request *http.Requ
 	}
 }
 
+func (g *Gossiper) postSearchForFile(writer http.ResponseWriter, request *http.Request) {
+	err := request.ParseForm()
+	if err != nil {
+		fmt.Println(err.Error())
+		writeErrorToHTTP(writer, err)
+	}
+	keywordsStr := request.Form.Get("Keywords")
+	budgetStr := request.Form.Get("Budget")
+	keywords := strings.Split(keywordsStr, ",")
+	budget, err := strconv.ParseUint(budgetStr, 10, 64)
+	if err != nil {
+		writeErrorToHTTP(writer, err)
+		fmt.Println(err.Error())
+	} else {
+		sr := common.SearchRequest{
+			Budget:   budget,
+			Origin:   g.name,
+			Keywords: keywords,
+		}
+		go g.searchRemoteFile(&sr)
+	}
+}
+
 func (g *Gossiper) postPrivateMessageHandler(writer http.ResponseWriter, request *http.Request) {
 	err := request.ParseForm()
 	if err != nil {
@@ -179,7 +221,7 @@ func (g *Gossiper) postFileToIndexHandler(writer http.ResponseWriter, request *h
 	}
 	filename := request.Form.Get("Filename")
 
-	hash, err := g.data.addFile(filepath.Join(common.SharedFilesFolder, filename))
+	hash, err := g.data.addLocalFile(filepath.Join(common.SharedFilesFolder, filename))
 	if err != nil {
 		writeErrorToHTTP(writer, err)
 		fmt.Println(err.Error())

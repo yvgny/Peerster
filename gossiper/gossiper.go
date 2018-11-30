@@ -35,6 +35,7 @@ type Gossiper struct {
 	waitAck           *sync.Map
 	waitData          *sync.Map
 	waitSearchRequest *common.ConcurrentSet
+	waitSearchReply   *sync.Map
 	messages          *sync.Map
 	privateMessages   *Mail
 	data              *DataManager
@@ -73,6 +74,11 @@ func NewGossiper(clientAddress, gossipAddress, name, peers string, simpleBroadca
 		}
 	}
 
+	dataManager, err := NewDataManager()
+	if err != nil {
+		return nil, err
+	}
+
 	g := &Gossiper{
 		gossipAddress:     gAddress,
 		clientAddress:     cAddress,
@@ -85,9 +91,10 @@ func NewGossiper(clientAddress, gossipAddress, name, peers string, simpleBroadca
 		waitAck:           &syncMap,
 		waitData:          &sync.Map{},
 		waitSearchRequest: common.NewConcurrentSet(),
+		waitSearchReply:   &sync.Map{},
 		messages:          &messagesMap,
 		privateMessages:   newMail(),
-		data:              NewDataManager(),
+		data:              dataManager,
 		routingTable:      NewRoutingTable(),
 		simple:            simpleBroadcastMode,
 	}
@@ -142,7 +149,7 @@ func (g *Gossiper) StartGossiper() {
 						fmt.Println(err.Error())
 					}
 				} else if clientPacket.FileIndex != nil {
-					hash, err := g.data.addFile(filepath.Join(common.SharedFilesFolder, clientPacket.FileIndex.Filename))
+					hash, err := g.data.addLocalFile(filepath.Join(common.SharedFilesFolder, clientPacket.FileIndex.Filename))
 					if err != nil {
 						fmt.Println(err.Error())
 					}
@@ -151,6 +158,12 @@ func (g *Gossiper) StartGossiper() {
 					err = g.downloadFile(clientPacket.FileDownload.User, clientPacket.FileDownload.HashValue, clientPacket.FileDownload.Filename)
 					if err != nil {
 						fmt.Println(err.Error())
+					}
+				} else if clientPacket.SearchRequest != nil {
+					clientPacket.SearchRequest.Origin = g.name
+					err = g.searchRemoteFile(clientPacket.SearchRequest)
+					if err != nil {
+						fmt.Println("Could not search file: " + err.Error())
 					}
 				}
 			}()
@@ -258,7 +271,7 @@ func (g *Gossiper) StartGossiper() {
 					}
 				} else if gossipPacket.DataRequest != nil {
 					if gossipPacket.DataRequest.Destination == g.name {
-						data, err := g.data.getData(gossipPacket.DataRequest.HashValue)
+						data, err := g.data.getLocalData(gossipPacket.DataRequest.HashValue)
 						if err == nil {
 							reply := common.GossipPacket{
 								DataReply: &common.DataReply{
@@ -307,10 +320,21 @@ func (g *Gossiper) StartGossiper() {
 						}
 					}
 				} else if gossipPacket.SearchRequest != nil {
-					err := g.processSearchRequest(gossipPacket, addr.String())
+					addrString := addr.String()
+					err = g.ReplyAndPropagateSearchRequest(gossipPacket, &addrString)
 					if err != nil {
 						fmt.Println(errors.New("error while processing search request: " + err.Error()))
 						return
+					}
+				} else if gossipPacket.SearchReply != nil {
+					if gossipPacket.SearchReply.Destination == g.name {
+						g.distributeSearchReply(gossipPacket.SearchReply)
+					} else {
+						err = g.forwardPacket(gossipPacket)
+						if err != nil {
+							fmt.Println("Could not forward search reply: " + err.Error())
+							return
+						}
 					}
 				}
 			}()
@@ -330,6 +354,9 @@ func (g *Gossiper) forwardPacket(packet *common.GossipPacket) error {
 	} else if packet.DataReply != nil {
 		dest = packet.DataReply.Destination
 		hopCount = packet.DataReply.HopLimit - 1
+	} else if packet.SearchReply != nil {
+		dest = packet.SearchReply.Destination
+		hopCount = packet.SearchReply.HopLimit - 1
 	} else {
 		return errors.New("cannot forward packet of this type")
 	}
@@ -352,28 +379,43 @@ func (g *Gossiper) forwardPacket(packet *common.GossipPacket) error {
 }
 
 func (g *Gossiper) downloadFile(user string, hash []byte, filename string) error {
-	nextHop, ok := g.routingTable.getNextHop(user)
-	if !ok {
-		return errors.New("no route to host " + nextHop)
+	metafileHash := hex.EncodeToString(hash)
+
+	// returns the the tuple (peer_name, next_hop, valid)
+	getNextHop := func(chunkNbc uint64) (string, string, bool) {
+		if user != "" {
+			address, valid := g.routingTable.getNextHop(user)
+			return user, address, valid
+		}
+		host, ok := g.data.getRandomChunkLocation(metafileHash, chunkNbc)
+		if !ok {
+			return "", "", false
+		}
+		nextHop, valid := g.routingTable.getNextHop(host)
+		return host, nextHop, valid
 	}
 
 	go func() {
 		packet := common.GossipPacket{
 			DataRequest: &common.DataRequest{
-				Origin:      g.name,
-				Destination: user,
-				HopLimit:    DefaultHopLimit,
-				HashValue:   hash,
+				Origin:    g.name,
+				HopLimit:  DefaultHopLimit,
+				HashValue: hash,
 			},
 		}
 
 		replyChan := make(chan *common.DataReply)
-		metafileHash := hex.EncodeToString(hash)
 		g.waitData.Store(metafileHash, &replyChan)
 		fmt.Printf("DOWNLOADING metafile of %s from %s\n", filename, user)
 		// retry every period to get the meta file
 		for try := 0; try < MaxChunkDownloadRetryLimit; try++ {
-			err := common.SendMessage(nextHop, &packet, g.gossipConn)
+			metafilePeer, metafileNextHop, ok := getNextHop(1)
+			if !ok {
+				fmt.Println("cannot find next hop for metafile (using hop of chunk 0)")
+				return
+			}
+			packet.DataRequest.Destination = metafilePeer
+			err := common.SendMessage(metafileNextHop, &packet, g.gossipConn)
 			if err != nil {
 				fmt.Println(err.Error())
 				return
@@ -389,7 +431,7 @@ func (g *Gossiper) downloadFile(user string, hash []byte, filename string) error
 					fmt.Println(errors.New("cannot download metafile : hash doesn't match with reply"))
 					return
 				}
-				err = g.data.addData(metafile, reply.HashValue)
+				err = g.data.addLocalData(metafile, reply.HashValue)
 				if err != nil {
 					fmt.Println(errors.New("cannot download metafile: " + err.Error()))
 				}
@@ -407,8 +449,13 @@ func (g *Gossiper) downloadFile(user string, hash []byte, filename string) error
 					packet.DataRequest.HashValue = metafile[i : i+sha256.Size]
 					chunckHex := hex.EncodeToString(packet.DataRequest.HashValue)
 					g.waitData.Store(chunckHex, &replyChan)
-					fmt.Printf("DOWNLOADING %s chunk %d from %s\n", filename, (i/sha256.Size)+1, user)
-
+					peer, nextHop, ok := getNextHop(chunkNr)
+					fmt.Printf("DOWNLOADING %s chunk %d from %s\n", filename, (i/sha256.Size)+1, peer)
+					if !ok {
+						fmt.Printf("cannot find next hop for chunk %d\n", i)
+						continue
+					}
+					packet.DataRequest.Destination = peer
 					// retry every period until chunk is downloaded
 				loop:
 					for try1 := 0; try1 < MaxChunkDownloadRetryLimit; try1++ {
@@ -425,7 +472,7 @@ func (g *Gossiper) downloadFile(user string, hash []byte, filename string) error
 								fmt.Println(errors.New("skipping chunk: cannot download chunk: hash mismatch"))
 								break loop
 							}
-							err = g.data.addData(chunck.Data, chunck.HashValue)
+							err = g.data.addLocalData(chunck.Data, chunck.HashValue)
 							if err != nil {
 								fmt.Println(errors.New("skipping chunk: cannot download chunk: " + err.Error()))
 								break loop
@@ -442,9 +489,9 @@ func (g *Gossiper) downloadFile(user string, hash []byte, filename string) error
 					}
 				}
 
-				f.Sync()
-				f.Close()
-				g.data.addRecord(metafileHash, filename, chunkList, uint64(len(metafile)/sha256.Size))
+				_ = f.Sync()
+				_ = f.Close()
+				g.data.addLocalRecord(metafileHash, filename, chunkList, uint64(len(metafile)/sha256.Size))
 				fmt.Printf("RECONSTRUCTED file %s\n", filename)
 
 				return

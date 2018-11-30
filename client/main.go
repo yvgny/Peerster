@@ -10,7 +10,6 @@ import (
 	"strings"
 )
 
-
 func main() {
 	uiPortArg := flag.String("UIPort", "8080", "port for the UI client")
 	msgArg := flag.String("msg", "", "message to be sent")
@@ -18,7 +17,7 @@ func main() {
 	fileArg := flag.String("file", "", "file to be indexed by the gossiper, or filename of the requested file")
 	requestArg := flag.String("request", "", "request a chunk or metafile of this hash")
 	keywordsArg := flag.String("keywords", "", "search a file by keywords")
-	budgetArg := flag.Int("budget", 0, "budget allowed for the expanding-ring search")
+	budgetArg := flag.Int("budget", 0, "budget allowed for the expanding-ring search.")
 	flag.Parse()
 
 	packet := &common.ClientPacket{}
@@ -26,9 +25,8 @@ func main() {
 	privateMsg := *msgArg != "" && *destArg != "" && *fileArg == "" && *requestArg == "" && *keywordsArg == ""
 	fileUpload := *msgArg == "" && *destArg == "" && *fileArg != "" && *requestArg == "" && *keywordsArg == ""
 	rumorMsg := *msgArg != "" && *destArg == "" && *fileArg == "" && *requestArg == "" && *keywordsArg == ""
-	fileRequestMsg := *msgArg == "" && *destArg != "" && *fileArg != "" && *requestArg != "" && *keywordsArg == ""
+	fileRequestMsg := *msgArg == "" && *fileArg != "" && *requestArg != "" && *keywordsArg == ""
 	fileSearch := *msgArg == "" && *destArg == "" && *fileArg == "" && *requestArg == "" && *keywordsArg != ""
-
 
 	if privateMsg {
 		packet.Private = &common.PrivateMessage{
@@ -61,10 +59,14 @@ func main() {
 			Filename:  *fileArg,
 		}
 	} else if fileSearch {
+		if !(*budgetArg >= 0) {
+			fmt.Println("Error: budget should be >= 0")
+			os.Exit(1)
+		}
 		keywords := strings.Split(*keywordsArg, ",")
 		searchRequest := common.SearchRequest{
-			Budget:uint64(*budgetArg),
-			Keywords:keywords,
+			Budget:   uint64(*budgetArg),
+			Keywords: keywords,
 		}
 		packet.SearchRequest = &searchRequest
 	} else {

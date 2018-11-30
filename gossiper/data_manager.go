@@ -4,9 +4,11 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"github.com/yvgny/Peerster/common"
 	"io"
 	"io/ioutil"
+	"math/rand"
 	"os"
 	"path/filepath"
 	"strings"
@@ -16,27 +18,109 @@ import (
 const DataCacheFolder = ".peerster"
 
 type DataManager struct {
-	records sync.Map
+	sync.RWMutex
+	localFiles  sync.Map
+	remoteFiles map[string]*RemoteFile
 }
 
-type FileMetaData struct {
+type LocalFile struct {
 	Name       string
 	ChunkMap   []uint64
 	MetaHash   string
 	ChunkCount uint64
 }
 
-func NewDataManager() *DataManager {
+type RemoteFile struct {
+	Name           string
+	ChunkCount     uint64
+	ChunkLocations map[uint64][]string
+}
+
+func NewDataManager() (*DataManager, error) {
 	if _, err := os.Stat(DataCacheFolder); os.IsNotExist(err) {
-		os.Mkdir(DataCacheFolder, os.ModePerm)
+		err = os.Mkdir(DataCacheFolder, os.ModePerm)
+		if err != nil {
+			return nil, err
+		}
 	}
 	return &DataManager{
-		records: sync.Map{},
+		localFiles:  sync.Map{},
+		remoteFiles: make(map[string]*RemoteFile),
+	}, nil
+}
+
+func (dm *DataManager) addChunkLocation(metafileHash, filename string, chunkNumbers []uint64, totalChunksCount uint64, host string) {
+	dm.Lock()
+	defer dm.Unlock()
+
+	// Load remote file or create a new one
+	remoteFile, ok := dm.remoteFiles[metafileHash]
+	if !ok {
+		remoteFile = &RemoteFile{
+			Name:           filename,
+			ChunkCount:     totalChunksCount,
+			ChunkLocations: make(map[uint64][]string),
+		}
+		dm.remoteFiles[metafileHash] = remoteFile
+	}
+
+	// Add the new chunks
+	for _, chunkNumber := range chunkNumbers {
+		if list, ok := remoteFile.ChunkLocations[chunkNumber]; !ok {
+			list = []string{host}
+			remoteFile.ChunkLocations[chunkNumber] = list
+		} else if !common.Contains(host, remoteFile.ChunkLocations[chunkNumber]) {
+			remoteFile.ChunkLocations[chunkNumber] = append(list, host)
+		}
 	}
 }
 
+func (dm *DataManager) getRandomChunkLocation(metafileHash string, chunkNumber uint64) (string, bool) {
+	dm.RLock()
+	defer dm.RUnlock()
+
+	remoteFile, ok := dm.remoteFiles[metafileHash]
+	if !ok {
+		return "", false
+	}
+
+	list, ok := remoteFile.ChunkLocations[chunkNumber]
+	if !ok {
+		return "", false
+	}
+
+	return list[rand.Intn(len(list))], true
+}
+
+// return every matched file, mapping the filename to their metafile hash
+func (dm *DataManager) getAllRemoteMatches() map[string]string {
+	dm.RLock()
+	defer dm.RUnlock()
+
+	result := make(map[string]string)
+
+	for key, metadata := range dm.remoteFiles {
+		if dm.remoteFileIsMatch(key) {
+			result[metadata.Name]=key
+		}
+	}
+
+	return result
+}
+
+func (dm *DataManager) remoteFileIsMatch(metafileHash string) bool {
+	dm.RLock()
+	defer dm.RUnlock()
+
+	remoteFile, ok := dm.remoteFiles[metafileHash]
+	if !ok {
+		return false
+	}
+	return remoteFile.ChunkCount == uint64(len(remoteFile.ChunkLocations))
+}
+
 // Index a new file and returns the hash of its meta file
-func (dm *DataManager) addFile(path string) ([]byte, error) {
+func (dm *DataManager) addLocalFile(path string) ([]byte, error) {
 	file, err := os.Open(path)
 	if err != nil {
 		return nil, err
@@ -51,7 +135,7 @@ func (dm *DataManager) addFile(path string) ([]byte, error) {
 	metafile := make([]byte, 0)
 
 	chunkMap := make([]uint64, 0)
-	chunkCount := uint64(1)
+	chunkCount := uint64(0)
 	for {
 		bytesread, err := file.Read(buffer)
 		if err != nil {
@@ -71,8 +155,8 @@ func (dm *DataManager) addFile(path string) ([]byte, error) {
 		}
 
 		// Add this chunk to the available chunk
-		chunkMap = append(chunkMap, chunkCount)
 		chunkCount++
+		chunkMap = append(chunkMap, chunkCount)
 
 		metafile = append(metafile, chunkHash[:]...)
 	}
@@ -83,12 +167,13 @@ func (dm *DataManager) addFile(path string) ([]byte, error) {
 		return nil, err
 	}
 
-	dm.addRecord(filename, file.Name(), chunkMap, chunkCount)
+	stats, _ := file.Stat()
+	dm.addLocalRecord(filename, stats.Name(), chunkMap, chunkCount)
 
 	return metafileHash[:], nil
 }
 
-func (dm *DataManager) addData(data, hash []byte) error {
+func (dm *DataManager) addLocalData(data, hash []byte) error {
 	hashBytes := sha256.Sum256(data)
 	hash1 := hex.EncodeToString(hash)
 	hash2 := hex.EncodeToString(hashBytes[:])
@@ -105,28 +190,28 @@ func (dm *DataManager) addData(data, hash []byte) error {
 	return nil
 }
 
-func (dm *DataManager) addRecord(hash, filename string, chunckMap []uint64, chunkCount uint64) {
-	md := FileMetaData{
+func (dm *DataManager) addLocalRecord(hash, filename string, chunckMap []uint64, chunkCount uint64) {
+	md := LocalFile{
 		Name:       filename,
 		ChunkMap:   chunckMap,
 		MetaHash:   hash,
 		ChunkCount: chunkCount,
 	}
 
-	dm.records.Store(hash, md)
+	dm.localFiles.Store(hash, md)
 }
 
-func (dm *DataManager) getRecord(hash string) (*FileMetaData, error) {
-	rawData, ok := dm.records.Load(hash)
+func (dm *DataManager) getLocalRecord(hash string) (*LocalFile, error) {
+	rawData, ok := dm.localFiles.Load(hash)
 	if !ok {
 		return nil, errors.New("cannot find requested record")
 	}
-	md := rawData.(FileMetaData)
+	md := rawData.(LocalFile)
 
 	return &md, nil
 }
 
-func (dm *DataManager) getData(hash []byte) ([]byte, error) {
+func (dm *DataManager) getLocalData(hash []byte) ([]byte, error) {
 	hashStr := hex.EncodeToString(hash)
 	rawData, err := ioutil.ReadFile(filepath.Join(DataCacheFolder, hashStr))
 	if err != nil {
@@ -136,29 +221,40 @@ func (dm *DataManager) getData(hash []byte) ([]byte, error) {
 	return rawData, nil
 }
 
-func (dm *DataManager) SearchFile(keywords []string) []*common.SearchResult {
+func (dm *DataManager) SearchLocalFile(keywords []string) []*common.SearchResult {
 	results := make([]*common.SearchResult, 0)
 	hashList := make([]string, 0)
-	dm.records.Range(func(hash, metadataRaw interface{}) bool {
-		metadata := metadataRaw.(FileMetaData)
-		for _, keyword := range keywords {
-			if strings.Contains(metadata.Name, keyword) {
-				hashByte, err := hex.DecodeString(metadata.MetaHash)
-				if err != nil || common.Contains(metadata.MetaHash, hashList){
-					return true
-				}
-				sr := common.SearchResult{
-					FileName:     metadata.Name,
-					MetafileHash: hashByte,
-					ChunkMap:     metadata.ChunkMap,
-				}
-				hashList = append(hashList, metadata.MetaHash)
-				results = append(results, &sr)
+	filter := CreateFilterFromKeywords(keywords)
+	dm.localFiles.Range(func(hash, metadataRaw interface{}) bool {
+		metadata := metadataRaw.(LocalFile)
+		fmt.Printf("%s is in the recorded files\n", metadata.Name)
+		if filter(metadata.Name) {
+			hashByte, err := hex.DecodeString(metadata.MetaHash)
+			if err != nil || common.Contains(metadata.MetaHash, hashList) {
+				return true
 			}
+			sr := common.SearchResult{
+				FileName:     metadata.Name,
+				MetafileHash: hashByte,
+				ChunkMap:     metadata.ChunkMap,
+				ChunkCount:   metadata.ChunkCount,
+			}
+			hashList = append(hashList, metadata.MetaHash)
+			results = append(results, &sr)
 		}
 
 		return true
 	})
-
+	fmt.Printf("results = %v\n", results)
 	return results
+}
+
+func CreateFilterFromKeywords(keywords []string) func(string) bool {
+	return func(s string) (valid bool) {
+		for _, keyword := range keywords {
+			valid = valid || strings.Contains(s, keyword)
+		}
+
+		return
+	}
 }

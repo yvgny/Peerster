@@ -8,6 +8,15 @@
     overflow-y: auto;
 }
 
+#file-search-result {
+    max-height: 30vh;
+    overflow-y: auto;
+}
+
+#file-search-result-module {
+    display: none;
+}
+
 #modal-alert .modal-content {
     width: auto;
 }

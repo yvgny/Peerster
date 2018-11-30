@@ -7,6 +7,9 @@ let dest = "";
 let peers = new Set();
 let nodes = new Set();
 let contacts = new Set();
+let matchedFiles = {};
+let currentResults = [];
+let currentKeywordsFilter = () => false;
 let PERIOD = 500;
 let ID = "";
 let messageURL = window.location.origin + "/message";
@@ -16,6 +19,8 @@ let contactsURL = window.location.origin + "/contacts";
 let pmURL = window.location.origin + "/private-message";
 let indexFileURL = window.location.origin + "/index-file";
 let downloadFileURL = window.location.origin + "/download-file";
+let searchFileURL = window.location.origin + "/search-file";
+let matchedFilesURL = window.location.origin + "/matched-files";
 let livePMupdates = false;
 
 // configure the DOM once it's fully loaded
@@ -36,7 +41,7 @@ $(document).ready(function () {
         e.preventDefault();
         let msg = $("#msg").val();
         $.post(messageURL, {Message: msg}, function () {
-            // handle succes
+            // handle success
             $("#msg").val("")
         }).fail(function (xhr) {
             showModalAlert("Unable to send new message: " + xhr.responseText, true)
@@ -85,6 +90,14 @@ $(document).ready(function () {
             });
     });
 
+    // Configure file search result click event
+    $('#file-search-result').on('click', 'li', function (e) {
+        e.preventDefault();
+        let filename = $(this).text();
+        let hash = matchedFiles[filename]
+        downloadFile(filename, "", hash)
+    });
+
     // Configure file indexing
     $('#index-file-form').submit(function (e) {
         e.preventDefault();
@@ -112,17 +125,49 @@ $(document).ready(function () {
         let filename = $('#file-download-filename').val();
         let userID = $('#file-download-host-id').val();
         let fileID = $('#file-download-file-id').val();
-        $.post(downloadFileURL, {Filename: filename, User: userID, HashValue: fileID}, function () {
-            // handle success
-            $('#file-download-filename').val("");
-            $('#file-download-host-id').val("");
-            $('#file-download-file-id').val("");
-            showModalAlert("The file is being downloaded !", false)
-        }).fail(function (xhr) {
-            showModalAlert("Unable to start download: " + xhr.responseText, true)
+        downloadFile(filename, userID, fileID)
+    });
+
+    // Configure file search box
+    $('#file-search-form').submit(function (e) {
+        e.preventDefault();
+        let keywords = $('#file-search-keywords').val();
+        let budget = $('#file-download-budget').val();
+        $.post(searchFileURL, {Keywords: keywords, Budget: budget}, function () {
+            $('#file-search-result').empty();
+            $('#file-search-result-module').show();
+            currentResults = [];
+            currentKeywordsFilter = createFilterFromKeywords(keywords)
         })
-    })
+    });
+
+    // Start polling matched files
+    pollNewSearchResult();
 });
+
+function downloadFile(filename, userID, fileID) {
+    $.post(downloadFileURL, {Filename: filename, User: userID, HashValue: fileID}, function () {
+        // handle success
+        $('#file-download-filename').val("");
+        $('#file-download-host-id').val("");
+        $('#file-download-file-id').val("");
+        showModalAlert("The file is being downloaded !", false)
+    }).fail(function (xhr) {
+        showModalAlert("Unable to start download: " + xhr.responseText, true)
+    })
+}
+
+function pollNewSearchResult() {
+    $.getJSON(matchedFilesURL, function (data) {
+        matchedFiles = data;
+        $.each(matchedFiles, function (filename) {
+            if (currentKeywordsFilter(filename) && !currentResults.includes(filename)) {
+                addResultEntry(filename);
+            }
+        });
+        setTimeout(pollNewSearchResult, PERIOD)
+    })
+}
 
 // poll for new nodes on the gossiper
 function pollNewNode() {
@@ -233,6 +278,13 @@ function addNewContact(contact) {
 `)
 }
 
+function addResultEntry(filename) {
+    currentResults.push(filename);
+    $('#file-search-result').append(`
+        <li class="list-group-item list-group-item-action">${filename}</li>
+    `)
+}
+
 
 // creates a unique string of the form id@origin
 function generateUniqueID(msg) {
@@ -282,4 +334,14 @@ function showModalAlert(text, error) {
 function scrollToBottom(id) {
     let div = document.getElementById(id);
     div.scrollTop = div.scrollHeight - div.clientHeight;
+}
+
+function createFilterFromKeywords(keywords) {
+    return function (filename) {
+        let matches = false;
+        keywords.split(",").forEach(keyword => {
+            matches = matches || filename.includes(keyword)
+        });
+        return matches
+    }
 }
