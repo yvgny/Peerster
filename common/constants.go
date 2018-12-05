@@ -9,3 +9,6 @@ const MatchThreshold = 2
 const SearchRequestDuplicateTimer = time.Second / 2
 const SearchRequestBudgetIncreasePeriod = time.Second
 const RemoteSearchTimeout = time.Minute
+const TxBroadcastHopLimit = 10
+const BlockBroadcastHopLimit = 20
+const HashMinLeadingZeroBitsLength = 16
