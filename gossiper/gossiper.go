@@ -173,6 +173,8 @@ func (g *Gossiper) StartGossiper() {
 					if err != nil {
 						fmt.Println(err.Error())
 					}
+					file, _ := g.data.getLocalRecord(hex.EncodeToString(hash))
+					_ = g.PublishTransaction(file.Name, file.Size, hash)
 					fmt.Printf("Added new file from %s with hash %s\n", clientPacket.FileIndex.Filename, hex.EncodeToString(hash))
 				} else if clientPacket.FileDownload != nil {
 					err = g.downloadFile(clientPacket.FileDownload.User, clientPacket.FileDownload.HashValue, clientPacket.FileDownload.Filename)
@@ -357,7 +359,19 @@ func (g *Gossiper) StartGossiper() {
 						}
 					}
 				} else if gossipPacket.TxPublish != nil {
-					g.blockchain.HandleTx(*gossipPacket.TxPublish)
+					valid := g.blockchain.HandleTx(*gossipPacket.TxPublish)
+					gossipPacket.TxPublish.HopLimit--
+					if valid && gossipPacket.TxPublish.HopLimit > 0 {
+						addrStr := addr.String()
+						common.BroadcastMessage(g.peers.Elements(), gossipPacket, &addrStr, g.gossipConn)
+					}
+				} else if gossipPacket.BlockPublish != nil {
+					valid := g.blockchain.AddBlock(&gossipPacket.BlockPublish.Block, false)
+					gossipPacket.BlockPublish.HopLimit--
+					if valid && gossipPacket.BlockPublish.HopLimit > 0 {
+						addrStr := addr.String()
+						common.BroadcastMessage(g.peers.Elements(), gossipPacket, &addrStr, g.gossipConn)
+					}
 				}
 			}()
 		}

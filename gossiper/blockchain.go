@@ -72,12 +72,13 @@ func (g *Gossiper) PublishTransaction(name string, size int64, metafileHash []by
 	return nil
 }
 
-func (bc *Blockchain) HandleTx(tx common.TxPublish) {
+// return true if transaction has been added (= valid + not seen for the moment)
+func (bc *Blockchain) HandleTx(tx common.TxPublish) bool {
 	bc.Lock()
 	defer bc.Unlock()
 	for _, pendingTx := range bc.pendingTransactions {
 		if tx.File.Name == pendingTx.File.Name {
-			return
+			return false
 		}
 	}
 
@@ -91,12 +92,15 @@ func (bc *Blockchain) HandleTx(tx common.TxPublish) {
 	})
 
 	if alreadyClaimed {
-		return
+		return false
 	}
 
 	bc.pendingTransactions = append(bc.pendingTransactions, tx)
+
+	return true
 }
 
+// return true is block is valid and added to the chain, or one if its fork
 func (bc *Blockchain) AddBlock(block *common.Block, minedLocally bool) bool {
 	bc.Lock()
 	defer bc.Unlock()
