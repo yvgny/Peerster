@@ -25,6 +25,7 @@ type DataManager struct {
 
 type LocalFile struct {
 	Name       string
+	Size       int64
 	ChunkMap   []uint64
 	MetaHash   string
 	ChunkCount uint64
@@ -101,7 +102,7 @@ func (dm *DataManager) getAllRemoteMatches() map[string]string {
 
 	for key, metadata := range dm.remoteFiles {
 		if dm.remoteFileIsMatch(key) {
-			result[metadata.Name]=key
+			result[metadata.Name] = key
 		}
 	}
 
@@ -168,7 +169,7 @@ func (dm *DataManager) addLocalFile(path string) ([]byte, error) {
 	}
 
 	stats, _ := file.Stat()
-	dm.addLocalRecord(filename, stats.Name(), chunkMap, chunkCount)
+	dm.addLocalRecord(filename, stats.Name(), chunkMap, chunkCount, stats.Size())
 
 	return metafileHash[:], nil
 }
@@ -190,7 +191,7 @@ func (dm *DataManager) addLocalData(data, hash []byte) error {
 	return nil
 }
 
-func (dm *DataManager) addLocalRecord(hash, filename string, chunckMap []uint64, chunkCount uint64) {
+func (dm *DataManager) addLocalRecord(hash, filename string, chunckMap []uint64, chunkCount uint64, size int64) {
 	md := LocalFile{
 		Name:       filename,
 		ChunkMap:   chunckMap,

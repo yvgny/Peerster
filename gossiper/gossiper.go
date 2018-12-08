@@ -491,7 +491,9 @@ func (g *Gossiper) downloadFile(user string, hash []byte, filename string) error
 
 				_ = f.Sync()
 				_ = f.Close()
-				g.data.addLocalRecord(metafileHash, filename, chunkList, uint64(len(metafile)/sha256.Size))
+
+				// TODO: change the size to the correct one
+				g.data.addLocalRecord(metafileHash, filename, chunkList, uint64(len(metafile)/sha256.Size), 0)
 				fmt.Printf("RECONSTRUCTED file %s\n", filename)
 
 				return
