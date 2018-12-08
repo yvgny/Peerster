@@ -7,6 +7,7 @@ import (
 	"github.com/yvgny/Peerster/common"
 	"math/rand"
 	"sync"
+	"time"
 )
 
 var GenesisBlockHash = [32]byte{}
@@ -252,6 +253,8 @@ func (bc *Blockchain) getTransactions() []common.TxPublish {
 
 func (bc *Blockchain) startMining(minedBlocks chan<- *common.Block) {
 	go func() {
+		computingFirstBlock := true
+		lastFoundBlockTime := time.Now()
 		block := common.Block{
 			Transactions: bc.getTransactions(),
 			PrevHash:     bc.longestChainLastBlock,
@@ -264,6 +267,16 @@ func (bc *Blockchain) startMining(minedBlocks chan<- *common.Block) {
 			default:
 				rand.Read(block.Nonce[:])
 				if powIsCorrect(&block) && bc.AddBlock(&block, true) {
+					if computingFirstBlock {
+						computingFirstBlock = false
+						timer := time.NewTimer(common.FirstBlockPublicationDelay)
+						<-timer.C
+					} else {
+						elapsedTime := time.Now().Sub(lastFoundBlockTime)
+						timer := time.NewTimer(elapsedTime * 2)
+						<-timer.C
+						lastFoundBlockTime = time.Now()
+					}
 					minedBlocks <- &block
 					fmt.Printf("FOUND-BLOCK %s\n", hex.EncodeToString(block.Hash()[:]))
 				}
