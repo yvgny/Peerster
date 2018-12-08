@@ -3,6 +3,7 @@ package gossiper
 import (
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"github.com/yvgny/Peerster/common"
 	"math/rand"
 	"sync"
@@ -35,8 +36,8 @@ func (bc *Blockchain) storeNewBlock(block *common.Block) {
 	bc.blocks.Store(hex.EncodeToString(block.Hash()[:]), block)
 }
 
-func (bc *Blockchain) getBlock(hash []byte) (*common.Block, bool) {
-	hashStr := hex.EncodeToString(hash)
+func (bc *Blockchain) getBlock(hash [32]byte) (*common.Block, bool) {
+	hashStr := hex.EncodeToString(hash[:])
 	block, present := bc.blocks.Load(hashStr)
 	if present {
 		return block.(*common.Block), present
@@ -100,11 +101,11 @@ func (bc *Blockchain) AddBlock(block *common.Block, minedLocally bool) bool {
 	defer bc.Unlock()
 
 	height := uint64(1)
-	_, prevBlockExists := bc.getBlock(block.PrevHash[:])
+	_, prevBlockExists := bc.getBlock(block.PrevHash)
 
 	forEachBlockInFork := func(block *common.Block, f func(*common.Block)) {
-		prev, prevExists := bc.getBlock(block.PrevHash[:])
-		for node, present := prev, prevExists; present; node, present = bc.getBlock(node.PrevHash[:]) {
+		prev, prevExists := bc.getBlock(block.PrevHash)
+		for node, present := prev, prevExists; present; node, present = bc.getBlock(node.PrevHash) {
 			f(node)
 		}
 	}
@@ -139,6 +140,22 @@ func (bc *Blockchain) AddBlock(block *common.Block, minedLocally bool) bool {
 		}
 	}
 
+	printChain := func(lastBlock *common.Block) {
+		out := "CHAIN"
+		forEachBlockInFork(lastBlock, func(node *common.Block) {
+			out += " "
+			out += fmt.Sprintf("%s:%s", hex.EncodeToString(node.Hash()[:]), hex.EncodeToString(node.PrevHash[:]))
+			if len(node.Transactions) > 0 {
+				txs := ""
+				for _, tx := range node.Transactions {
+					txs += fmt.Sprintf("%s:%s", tx.File.Name, hex.EncodeToString(tx.File.MetafileHash))
+				}
+				out += txs
+			}
+		})
+		fmt.Println(out)
+	}
+
 	// Check if it creates a longer chain
 	if block.PrevHash == bc.longestChainLastBlock {
 		bc.addNewMappings(block.Transactions)
@@ -148,18 +165,49 @@ func (bc *Blockchain) AddBlock(block *common.Block, minedLocally bool) bool {
 
 		// Remove tx that have been added with this block
 		removeInvalidTransaction()
+		printChain(block)
 	} else if height > bc.currentHeight {
+		//
 		// swap to longest fork
+		//
 		bc.mappings = sync.Map{}
 		bc.storeNewBlock(block)
 		forEachBlockInFork(block, func(node *common.Block) {
 			bc.addNewMappings(block.Transactions)
 		})
+		bc.currentHeight = height
+
+		//
+		// Compute number of rewinded block
+		//
+		currentLastBlock, _ := bc.getBlock(bc.longestChainLastBlock)
+		rewindedBlock := 0
+		blockHeight := make(map[[32]byte]int)
+		blockHeight[bc.longestChainLastBlock] = rewindedBlock
+		// save height each block in current fork
+		forEachBlockInFork(currentLastBlock, func(node *common.Block) {
+			rewindedBlock++
+			blockHeight[node.PrevHash] = rewindedBlock
+		})
+		// find the node where the fork happened
+		forEachBlockInFork(block, func(node *common.Block) {
+			exists := false
+			rewindedBlock, exists = blockHeight[node.PrevHash]
+			if exists {
+				return
+			}
+		})
+
+		// Switch chain
+		bc.longestChainLastBlock = block.Hash()
 
 		// Remove invalid transactions
 		removeInvalidTransaction()
+		fmt.Printf("FORK-LONGER rewind %d blocks\n", rewindedBlock)
+		printChain(block)
 	} else {
 		bc.storeNewBlock(block)
+		fmt.Printf("FORK-SHORTER %s\n", hex.EncodeToString(block.Hash()[:]))
 	}
 
 	return true
@@ -217,6 +265,7 @@ func (bc *Blockchain) startMining(minedBlocks chan<- *common.Block) {
 				rand.Read(block.Nonce[:])
 				if powIsCorrect(&block) && bc.AddBlock(&block, true) {
 					minedBlocks <- &block
+					fmt.Printf("FOUND-BLOCK %s\n", hex.EncodeToString(block.Hash()[:]))
 				}
 			}
 		}

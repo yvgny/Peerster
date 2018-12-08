@@ -41,6 +41,7 @@ type Gossiper struct {
 	data              *DataManager
 	routingTable      *RoutingTable
 	simple            bool
+	blockchain        *Blockchain
 	mutex             sync.Mutex
 }
 
@@ -97,11 +98,30 @@ func NewGossiper(clientAddress, gossipAddress, name, peers string, simpleBroadca
 		data:              dataManager,
 		routingTable:      NewRoutingTable(),
 		simple:            simpleBroadcastMode,
+		blockchain:        NewBlockchain(),
 	}
 
 	g.startAntiEntropy(time.Duration(AntiEntropyPeriod) * time.Second)
 
 	g.startRouteRumoring(time.Duration(rtimer) * time.Second)
+
+	// Listen to blocks that are mined and broadcast them
+	newBlocks := make(chan *common.Block, 10)
+	go func() {
+		for {
+			select {
+			case block := <-newBlocks:
+				packet := &common.GossipPacket{
+					BlockPublish: &common.BlockPublish{
+						Block:    *block,
+						HopLimit: common.BlockBroadcastHopLimit,
+					},
+				}
+				common.BroadcastMessage(g.peers.Elements(), packet, nil, g.gossipConn)
+			}
+		}
+	}()
+	g.blockchain.startMining(newBlocks)
 
 	return g, nil
 }
@@ -336,6 +356,8 @@ func (g *Gossiper) StartGossiper() {
 							return
 						}
 					}
+				} else if gossipPacket.TxPublish != nil {
+					g.blockchain.HandleTx(*gossipPacket.TxPublish)
 				}
 			}()
 		}
