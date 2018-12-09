@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/yvgny/Peerster/common"
 	"math/rand"
+	"strings"
 	"sync"
 	"time"
 )
@@ -14,13 +15,12 @@ var GenesisBlockHash = [32]byte{}
 
 type Blockchain struct {
 	sync.RWMutex
-	pendingTransactions         []common.TxPublish
-	blocks                      sync.Map
-	longestChainLastBlock       [32]byte
-	currentHeight               uint64
-	mappings                    sync.Map
-	firstBroadcastBlockReceived bool
-	changesNotifier             chan Notification
+	pendingTransactions   []common.TxPublish
+	blocks                sync.Map
+	longestChainLastBlock [32]byte
+	currentHeight         uint64
+	mappings              sync.Map
+	changesNotifier       chan Notification
 }
 
 type Notification struct{}
@@ -33,15 +33,19 @@ func NewBlockchain() *Blockchain {
 	}
 }
 
-func (bc *Blockchain) storeNewBlock(block *common.Block) {
-	bc.blocks.Store(hex.EncodeToString(block.Hash()[:]), block)
+func (bc *Blockchain) storeNewBlock(block common.Block) {
+	hash := block.Hash()
+	block.Transactions = append([]common.TxPublish(nil), block.Transactions...)
+	bc.blocks.Store(hex.EncodeToString(hash[:]), block)
 }
 
 func (bc *Blockchain) getBlock(hash [32]byte) (*common.Block, bool) {
 	hashStr := hex.EncodeToString(hash[:])
-	block, present := bc.blocks.Load(hashStr)
+	blockRaw, present := bc.blocks.Load(hashStr)
 	if present {
-		return block.(*common.Block), present
+		block := blockRaw.(common.Block)
+		block.Transactions = append([]common.TxPublish(nil), block.Transactions...)
+		return &block, present
 	}
 
 	return nil, present
@@ -59,11 +63,15 @@ func (g *Gossiper) PublishTransaction(name string, size int64, metafileHash []by
 		HopLimit: common.TxBroadcastHopLimit,
 	}
 
-	errs := common.BroadcastMessage(g.peers.Elements(), &tx, nil, g.gossipConn)
+	packet := common.GossipPacket{
+		TxPublish: &tx,
+	}
+
+	errs := common.BroadcastMessage(g.peers.Elements(), &packet, nil, g.gossipConn)
 	if len(errs) > 0 {
 		str := ""
 		for counter, err := range errs {
-			str += "(" + string(counter) + ") " + err.Error()
+			str += "(" + string(counter) + ") " + err.Error() + " "
 		}
 
 		return errors.New("tx could not be delivered to some peers: " + str)
@@ -76,52 +84,53 @@ func (g *Gossiper) PublishTransaction(name string, size int64, metafileHash []by
 func (bc *Blockchain) HandleTx(tx common.TxPublish) bool {
 	bc.Lock()
 	defer bc.Unlock()
+	return bc.handleTxWithoutLock(tx)
+}
+
+// return true if transaction has been added (= valid + not seen for the moment)
+func (bc *Blockchain) handleTxWithoutLock(tx common.TxPublish) bool {
 	for _, pendingTx := range bc.pendingTransactions {
 		if tx.File.Name == pendingTx.File.Name {
 			return false
 		}
 	}
 
-	alreadyClaimed := false
-
-	bc.mappings.Range(func(nameRaw, _ interface{}) bool {
-		name := nameRaw.(string)
-		alreadyClaimed = name == tx.File.Name
-
-		return !alreadyClaimed
-	})
+	_, alreadyClaimed := bc.mappings.Load(tx.File.Name)
 
 	if alreadyClaimed {
 		return false
 	}
 
 	bc.pendingTransactions = append(bc.pendingTransactions, tx)
+	bc.notifyMinerForChanges()
 
 	return true
 }
 
 // return true is block is valid and added to the chain, or one if its fork
-func (bc *Blockchain) AddBlock(block *common.Block, minedLocally bool) bool {
+func (bc *Blockchain) AddBlock(block common.Block, minedLocally bool) bool {
+	block.Transactions = append([]common.TxPublish(nil), block.Transactions...)
 	bc.Lock()
 	defer bc.Unlock()
 
 	height := uint64(1)
-	_, prevBlockExists := bc.getBlock(block.PrevHash)
+	prevBlock, prevBlockExists := bc.getBlock(block.PrevHash)
+	_, blockExists := bc.getBlock(block.Hash())
+	if blockExists {
+		return false
+	}
 
-	forEachBlockInFork := func(block *common.Block, f func(*common.Block)) {
-		prev, prevExists := bc.getBlock(block.PrevHash)
-		for node, present := prev, prevExists; present; node, present = bc.getBlock(node.PrevHash) {
+	forEachBlockInFork := func(lastBlock *common.Block, f func(*common.Block)) {
+		for node, present := lastBlock, true; present; node, present = bc.getBlock(node.PrevHash) {
 			f(node)
 		}
 	}
 
 	// Check block validity
-	if !powIsCorrect(block) {
+	if !powIsCorrect(&block) {
 		return false
-	} else if !prevBlockExists && bc.firstBroadcastBlockReceived {
-		return false
-	} else {
-		forEachBlockInFork(block, func(node *common.Block) {
+	} else if prevBlockExists {
+		forEachBlockInFork(prevBlock, func(node *common.Block) {
 			height++
 			for _, tx := range node.Transactions {
 				for _, newTx := range block.Transactions {
@@ -132,16 +141,12 @@ func (bc *Blockchain) AddBlock(block *common.Block, minedLocally bool) bool {
 			}
 		})
 	}
-	if !minedLocally {
-		bc.firstBroadcastBlockReceived = true
-	}
 
 	removeInvalidTransaction := func() {
-		currentTxs := make([]common.TxPublish, len(bc.pendingTransactions))
-		copy(currentTxs, bc.pendingTransactions)
+		currentTxs := append([]common.TxPublish(nil), bc.pendingTransactions...)
 		bc.pendingTransactions = make([]common.TxPublish, 0)
 		for _, tx := range currentTxs {
-			bc.HandleTx(tx)
+			bc.handleTxWithoutLock(tx)
 		}
 	}
 
@@ -149,17 +154,22 @@ func (bc *Blockchain) AddBlock(block *common.Block, minedLocally bool) bool {
 		out := "CHAIN"
 		forEachBlockInFork(lastBlock, func(node *common.Block) {
 			out += " "
-			out += fmt.Sprintf("%s:%s", hex.EncodeToString(node.Hash()[:]), hex.EncodeToString(node.PrevHash[:]))
+			hash := node.Hash()
+			prevHash := node.PrevHash
+			out += fmt.Sprintf("%s:%s:", hex.EncodeToString(hash[:]), hex.EncodeToString(prevHash[:]))
 			if len(node.Transactions) > 0 {
 				txs := ""
 				for _, tx := range node.Transactions {
-					txs += fmt.Sprintf("%s:%s", tx.File.Name, hex.EncodeToString(tx.File.MetafileHash))
+					txs += fmt.Sprintf("%s%s", tx.File.Name, ",")
 				}
+				txs = strings.TrimSuffix(txs, ",")
 				out += txs
 			}
 		})
 		fmt.Println(out)
 	}
+
+	fmt.Printf("height = %d, currengtHeight = %d\n", height, bc.currentHeight)
 
 	// Check if it creates a longer chain
 	if block.PrevHash == bc.longestChainLastBlock {
@@ -170,14 +180,15 @@ func (bc *Blockchain) AddBlock(block *common.Block, minedLocally bool) bool {
 
 		// Remove tx that have been added with this block
 		removeInvalidTransaction()
-		printChain(block)
+		printChain(&block)
 	} else if height > bc.currentHeight {
+
 		//
 		// swap to longest fork
 		//
 		bc.mappings = sync.Map{}
 		bc.storeNewBlock(block)
-		forEachBlockInFork(block, func(node *common.Block) {
+		forEachBlockInFork(&block, func(node *common.Block) {
 			bc.addNewMappings(block.Transactions)
 		})
 		bc.currentHeight = height
@@ -195,7 +206,7 @@ func (bc *Blockchain) AddBlock(block *common.Block, minedLocally bool) bool {
 			blockHeight[node.PrevHash] = rewindedBlock
 		})
 		// find the node where the fork happened
-		forEachBlockInFork(block, func(node *common.Block) {
+		forEachBlockInFork(&block, func(node *common.Block) {
 			exists := false
 			rewindedBlock, exists = blockHeight[node.PrevHash]
 			if exists {
@@ -209,19 +220,27 @@ func (bc *Blockchain) AddBlock(block *common.Block, minedLocally bool) bool {
 		// Remove invalid transactions
 		removeInvalidTransaction()
 		fmt.Printf("FORK-LONGER rewind %d blocks\n", rewindedBlock)
-		printChain(block)
+		printChain(&block)
 	} else {
+		createsFork := false
+		bc.blocks.Range(func(_, blockRaw interface{}) bool {
+			existentBlock := blockRaw.(common.Block)
+			createsFork = existentBlock.PrevHash == block.PrevHash
+
+			return !createsFork
+		})
 		bc.storeNewBlock(block)
-		fmt.Printf("FORK-SHORTER %s\n", hex.EncodeToString(block.Hash()[:]))
+		if createsFork {
+			fmt.Printf("FORK-SHORTER %s\n", hex.EncodeToString(block.PrevHash[:]))
+		}
 	}
 
+	bc.notifyMinerForChanges()
 	return true
 }
 
 // Add new mappings. Should be called when a write lock on the Blockchain is taken !
 func (bc *Blockchain) addNewMappings(txs []common.TxPublish) {
-	bc.Lock()
-	defer bc.Unlock()
 	for _, tx := range txs {
 		bc.mappings.Store(tx.File.Name, hex.EncodeToString(tx.File.MetafileHash))
 	}
@@ -246,31 +265,40 @@ func (bc *Blockchain) notifyMinerForChanges() {
 	}
 }
 
+// should be called when a RLock or Lock is taken on the bc
 func (bc *Blockchain) getTransactions() []common.TxPublish {
-	bc.RLock()
-	defer bc.RUnlock()
 	copied := make([]common.TxPublish, len(bc.pendingTransactions))
 	copy(copied, bc.pendingTransactions)
 
 	return copied
 }
 
-func (bc *Blockchain) startMining(minedBlocks chan<- *common.Block) {
+func (bc *Blockchain) startMining(minedBlocks chan<- common.Block, debug bool) {
 	go func() {
 		computingFirstBlock := true
 		lastFoundBlockTime := time.Now()
+		bc.Lock()
 		block := common.Block{
 			Transactions: bc.getTransactions(),
 			PrevHash:     bc.longestChainLastBlock,
 		}
+		bc.Unlock()
+		if !debug {
+			timer := time.NewTimer(time.Second * 2)
+			<-timer.C
+		}
 		for {
 			select {
 			case _ = <-bc.changesNotifier:
-				block.Transactions = bc.getTransactions()
-				block.PrevHash = bc.longestChainLastBlock
+				bc.Lock()
+				block = common.Block{
+					Transactions: bc.getTransactions(),
+					PrevHash:     bc.longestChainLastBlock,
+				}
+				bc.Unlock()
 			default:
 				rand.Read(block.Nonce[:])
-				if powIsCorrect(&block) && bc.AddBlock(&block, true) {
+				if powIsCorrect(&block) && bc.AddBlock(block, true) {
 					if computingFirstBlock {
 						computingFirstBlock = false
 						timer := time.NewTimer(common.FirstBlockPublicationDelay)
@@ -279,10 +307,17 @@ func (bc *Blockchain) startMining(minedBlocks chan<- *common.Block) {
 						elapsedTime := time.Now().Sub(lastFoundBlockTime)
 						timer := time.NewTimer(elapsedTime * 2)
 						<-timer.C
-						lastFoundBlockTime = time.Now()
 					}
-					minedBlocks <- &block
-					fmt.Printf("FOUND-BLOCK %s\n", hex.EncodeToString(block.Hash()[:]))
+					minedBlocks <- block
+					hash := block.Hash()
+					lastFoundBlockTime = time.Now()
+					fmt.Printf("FOUND-BLOCK %s\n", hex.EncodeToString(hash[:]))
+					bc.Lock()
+					block = common.Block{
+						Transactions: bc.getTransactions(),
+						PrevHash:     bc.longestChainLastBlock,
+					}
+					bc.Unlock()
 				}
 			}
 		}

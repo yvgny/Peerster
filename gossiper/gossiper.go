@@ -106,14 +106,14 @@ func NewGossiper(clientAddress, gossipAddress, name, peers string, simpleBroadca
 	g.startRouteRumoring(time.Duration(rtimer) * time.Second)
 
 	// Listen to blocks that are mined and broadcast them
-	newBlocks := make(chan *common.Block, 10)
+	newBlocks := make(chan common.Block, 10)
 	go func() {
 		for {
 			select {
 			case block := <-newBlocks:
 				packet := &common.GossipPacket{
 					BlockPublish: &common.BlockPublish{
-						Block:    *block,
+						Block:    block,
 						HopLimit: common.BlockBroadcastHopLimit,
 					},
 				}
@@ -121,7 +121,7 @@ func NewGossiper(clientAddress, gossipAddress, name, peers string, simpleBroadca
 			}
 		}
 	}()
-	g.blockchain.startMining(newBlocks)
+	g.blockchain.startMining(newBlocks, g.name == "Sacha")
 
 	return g, nil
 }
@@ -174,8 +174,20 @@ func (g *Gossiper) StartGossiper() {
 						fmt.Println(err.Error())
 					}
 					file, _ := g.data.getLocalRecord(hex.EncodeToString(hash))
-					_ = g.PublishTransaction(file.Name, file.Size, hash)
-					fmt.Printf("Added new file from %s with hash %s\n", clientPacket.FileIndex.Filename, hex.EncodeToString(hash))
+					hashSlice, _ := hex.DecodeString(file.MetaHash)
+					tx := common.TxPublish{
+						File: common.File{
+							Size:         file.Size,
+							Name:         file.Name,
+							MetafileHash: hashSlice,
+						},
+					}
+					if valid := g.blockchain.HandleTx(tx); valid {
+						_ = g.PublishTransaction(file.Name, file.Size, hash)
+						fmt.Printf("Added new file from %s with hash %s\n", clientPacket.FileIndex.Filename, hex.EncodeToString(hash))
+					} else {
+						fmt.Println("Cannot index file: name already exists in blockchain")
+					}
 				} else if clientPacket.FileDownload != nil {
 					err = g.downloadFile(clientPacket.FileDownload.User, clientPacket.FileDownload.HashValue, clientPacket.FileDownload.Filename)
 					if err != nil {
@@ -366,7 +378,7 @@ func (g *Gossiper) StartGossiper() {
 						common.BroadcastMessage(g.peers.Elements(), gossipPacket, &addrStr, g.gossipConn)
 					}
 				} else if gossipPacket.BlockPublish != nil {
-					valid := g.blockchain.AddBlock(&gossipPacket.BlockPublish.Block, false)
+					valid := g.blockchain.AddBlock(gossipPacket.BlockPublish.Block, false)
 					gossipPacket.BlockPublish.HopLimit--
 					if valid && gossipPacket.BlockPublish.HopLimit > 0 {
 						addrStr := addr.String()

@@ -11,5 +11,5 @@ const SearchRequestBudgetIncreasePeriod = time.Second
 const RemoteSearchTimeout = time.Minute
 const TxBroadcastHopLimit = 10
 const BlockBroadcastHopLimit = 20
-const HashMinLeadingZeroBitsLength = 16
+const HashMinLeadingZeroBitsLength = 18
 const FirstBlockPublicationDelay = time.Second * 5
