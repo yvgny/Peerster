@@ -121,7 +121,7 @@ func NewGossiper(clientAddress, gossipAddress, name, peers string, simpleBroadca
 			}
 		}
 	}()
-	g.blockchain.startMining(newBlocks, g.name == "Sacha")
+	g.blockchain.startMining(newBlocks)
 
 	return g, nil
 }

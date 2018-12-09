@@ -273,7 +273,7 @@ func (bc *Blockchain) getTransactions() []common.TxPublish {
 	return copied
 }
 
-func (bc *Blockchain) startMining(minedBlocks chan<- common.Block, debug bool) {
+func (bc *Blockchain) startMining(minedBlocks chan<- common.Block) {
 	go func() {
 		computingFirstBlock := true
 		lastFoundBlockTime := time.Now()
@@ -283,10 +283,6 @@ func (bc *Blockchain) startMining(minedBlocks chan<- common.Block, debug bool) {
 			PrevHash:     bc.longestChainLastBlock,
 		}
 		bc.Unlock()
-		if !debug {
-			timer := time.NewTimer(time.Second * 2)
-			<-timer.C
-		}
 		for {
 			select {
 			case _ = <-bc.changesNotifier:
