@@ -109,9 +109,12 @@ func (bc *Blockchain) handleTxWithoutLock(tx common.TxPublish) bool {
 
 // return true is block is valid and added to the chain, or one if its fork
 func (bc *Blockchain) AddBlock(block common.Block, minedLocally bool) bool {
-	block.Transactions = append([]common.TxPublish(nil), block.Transactions...)
 	bc.Lock()
 	defer bc.Unlock()
+	block.Transactions = append([]common.TxPublish(nil), block.Transactions...)
+	for index, tx := range block.Transactions {
+		block.Transactions[index].File.MetafileHash = append([]byte(nil), tx.File.MetafileHash...)
+	}
 
 	height := uint64(1)
 	prevBlock, prevBlockExists := bc.getBlock(block.PrevHash)
@@ -168,8 +171,6 @@ func (bc *Blockchain) AddBlock(block common.Block, minedLocally bool) bool {
 		})
 		fmt.Println(out)
 	}
-
-	fmt.Printf("height = %d, currengtHeight = %d\n", height, bc.currentHeight)
 
 	// Check if it creates a longer chain
 	if block.PrevHash == bc.longestChainLastBlock {
@@ -269,6 +270,9 @@ func (bc *Blockchain) notifyMinerForChanges() {
 func (bc *Blockchain) getTransactions() []common.TxPublish {
 	copied := make([]common.TxPublish, len(bc.pendingTransactions))
 	copy(copied, bc.pendingTransactions)
+	for index, tx := range copied {
+		copied[index].File.MetafileHash = append([]byte(nil), tx.File.MetafileHash...)
+	}
 
 	return copied
 }
@@ -304,16 +308,11 @@ func (bc *Blockchain) startMining(minedBlocks chan<- common.Block) {
 						timer := time.NewTimer(elapsedTime * 2)
 						<-timer.C
 					}
+
 					minedBlocks <- block
 					hash := block.Hash()
 					lastFoundBlockTime = time.Now()
 					fmt.Printf("FOUND-BLOCK %s\n", hex.EncodeToString(hash[:]))
-					bc.Lock()
-					block = common.Block{
-						Transactions: bc.getTransactions(),
-						PrevHash:     bc.longestChainLastBlock,
-					}
-					bc.Unlock()
 				}
 			}
 		}

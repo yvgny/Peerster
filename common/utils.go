@@ -5,7 +5,7 @@ import (
 	"os"
 )
 
-// Returns true with probability 1/2y
+// Returns true with probability 1/2
 func FlipACoin() bool {
 	return rand.Int()%2 == 0
 }
