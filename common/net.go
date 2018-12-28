@@ -134,7 +134,7 @@ type ClientPacket struct {
 	FileDownload *FileDownloadPacket
 }
 
-type Signature [32]byte
+type Signature []byte
 
 type IdentityPKeyMapping struct {
 	Identity  string
@@ -150,6 +150,7 @@ type FileUploadMessage struct {
 }
 
 type FileUploadAck struct {
+	Origin         string
 	MetaHash       [32]byte
 	UploadedChunks []uint32
 	Signatures     []Signature
