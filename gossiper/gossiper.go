@@ -176,7 +176,7 @@ func (g *Gossiper) StartGossiper() {
 					file, _ := g.data.getLocalRecord(hex.EncodeToString(hash))
 					hashSlice, _ := hex.DecodeString(file.MetaHash)
 					tx := common.TxPublish{
-						File: common.File{
+						File: &common.File{
 							Size:         file.Size,
 							Name:         file.Name,
 							MetafileHash: hashSlice,

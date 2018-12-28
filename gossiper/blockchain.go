@@ -59,7 +59,7 @@ func (g *Gossiper) PublishTransaction(name string, size int64, metafileHash []by
 	}
 
 	tx := common.TxPublish{
-		File:     file,
+		File:     &file,
 		HopLimit: common.TxBroadcastHopLimit,
 	}
 

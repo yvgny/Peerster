@@ -17,17 +17,19 @@ type SimpleMessage struct {
 }
 
 type RumorMessage struct {
-	Origin string
-	ID     uint32
-	Text   string
+	Origin    string
+	ID        uint32
+	Text      string
+	Signature Signature
 }
 
 type PrivateMessage struct {
 	Origin      string
 	ID          uint32
-	Text        string
+	Text        string // base64 encoding of encrypted msg
 	Destination string
 	HopLimit    uint32
+	Signature   Signature
 }
 
 type PeerStatus struct {
@@ -85,8 +87,9 @@ type SearchResult struct {
 }
 
 type TxPublish struct {
-	File     File
+	File     *File
 	HopLimit uint32
+	Mapping  *IdentityPKeyMapping
 }
 
 type BlockPublish struct {
@@ -125,6 +128,37 @@ type ClientPacket struct {
 	GossipPacket
 	FileIndex    *FileIndexPacket
 	FileDownload *FileDownloadPacket
+}
+
+type Signature [32]byte
+
+type IdentityPKeyMapping struct {
+	Identity  string
+	PublicKey []byte
+	Signature Signature
+}
+
+type FileUploadMessage struct {
+	MetaHash       [32]byte
+	MetaFile       []byte
+	HopLimit       uint32
+	UploadedChunks []uint32
+}
+
+type FileUploadAck struct {
+	MetaHash       [32]byte
+	UploadedChunks []uint32
+	Signatures     []Signature
+}
+
+type UploadedFileRequest struct {
+	MetaHash [32]byte
+	Nonce    [32]byte
+}
+
+type UploadedFileReply struct {
+	OwnedChunks []uint32
+	Signature   Signature
 }
 
 // Hash functions for structs
