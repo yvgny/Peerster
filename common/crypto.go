@@ -12,11 +12,11 @@ import (
 
 func EncryptText(text string, key *rsa.PublicKey) string {
 	encrypt, _ := rsa.EncryptOAEP(sha256.New(), rand.Reader, key, []byte(text), nil)
-	return base64.StdEncoding.EncodeToString(encrypt)
+	return base64.RawStdEncoding.EncodeToString(encrypt)
 }
 
 func DecryptText(text string, key *rsa.PrivateKey) (string, error) {
-	encrypted, err := base64.StdEncoding.DecodeString(text)
+	encrypted, err := base64.RawStdEncoding.DecodeString(text)
 	if err != nil {
 		return "", err
 	}
@@ -68,32 +68,38 @@ func DecryptChunk(ciphertext []byte, key [32]byte) ([]byte, error) {
 }
 
 func (rm *RumorMessage) Sign(key *rsa.PrivateKey) {
-	signature, _ := rsa.SignPSS(rand.Reader, key, crypto.SHA256, rm.Hash()[:], nil)
+	hash := rm.Hash()
+	signature, _ := rsa.SignPSS(rand.Reader, key, crypto.SHA256, hash[:], nil)
 	rm.Signature = signature
 }
 
 func (rm *RumorMessage) VerifySignature(key *rsa.PublicKey) bool {
-	err := rsa.VerifyPSS(key, crypto.SHA256, rm.Hash()[:], rm.Signature, nil)
+	hash := rm.Hash()
+	err := rsa.VerifyPSS(key, crypto.SHA256, hash[:], rm.Signature, nil)
 	return err == nil
 }
 
 func (pm *PrivateMessage) Sign(key *rsa.PrivateKey) {
-	signature, _ := rsa.SignPSS(rand.Reader, key, crypto.SHA256, pm.Hash()[:], nil)
+	hash := pm.Hash()
+	signature, _ := rsa.SignPSS(rand.Reader, key, crypto.SHA256, hash[:], nil)
 	pm.Signature = signature
 }
 
 func (pm *PrivateMessage) VerifySignature(key *rsa.PublicKey) bool {
-	err := rsa.VerifyPSS(key, crypto.SHA256, pm.Hash()[:], pm.Signature, nil)
+	hash := pm.Hash()
+	err := rsa.VerifyPSS(key, crypto.SHA256, hash[:], pm.Signature, nil)
 	return err == nil
 }
 
 func (id *IdentityPKeyMapping) Sign(key *rsa.PrivateKey) {
-	signature, _ := rsa.SignPSS(rand.Reader, key, crypto.SHA256, id.Hash()[:], nil)
+	hash := id.Hash()
+	signature, _ := rsa.SignPSS(rand.Reader, key, crypto.SHA256, hash[:], nil)
 	id.Signature = signature
 }
 
 func (id *IdentityPKeyMapping) VerifySignature(key *rsa.PublicKey) bool {
-	err := rsa.VerifyPSS(key, crypto.SHA256, id.Hash()[:], id.Signature, nil)
+	hash := id.Hash()
+	err := rsa.VerifyPSS(key, crypto.SHA256, hash[:], id.Signature, nil)
 	return err == nil
 }
 
@@ -101,13 +107,15 @@ func (fua *FileUploadAck) Sign(key *rsa.PrivateKey, nonce [32]byte, chunks [][]b
 	if len(chunks) != len(fua.UploadedChunks) {
 		return
 	}
-	fua.Signature, _ = rsa.SignPSS(rand.Reader, key, crypto.SHA256, fua.Hash(chunks, nonce)[:], nil)
+	hash := fua.Hash(chunks, nonce)
+	fua.Signature, _ = rsa.SignPSS(rand.Reader, key, crypto.SHA256, hash[:], nil)
 }
 
 func (fua *FileUploadAck) VerifySignature(key *rsa.PublicKey, nonce [32]byte, chunks [][]byte) bool {
 	if len(chunks) != len(fua.UploadedChunks) {
 		return false
 	}
-	err := rsa.VerifyPSS(key, crypto.SHA256, fua.Hash(chunks, nonce)[:], fua.Signature, nil)
+	hash := fua.Hash(chunks, nonce)
+	err := rsa.VerifyPSS(key, crypto.SHA256, hash[:], fua.Signature, nil)
 	return err == nil
 }

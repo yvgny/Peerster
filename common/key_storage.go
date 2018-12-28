@@ -17,7 +17,7 @@ const RsaKeyBitLength = 2048
 
 var DiskStorageLocation = path.Join(HiddenStorageFolder, "keys")
 var asymKeyLoc = path.Join(DiskStorageLocation, "asym.pem")
-var symKeyLoc = path.Join(DiskStorageLocation, "sym.pem")
+var symKeyLoc = path.Join(DiskStorageLocation, "sym.key")
 
 type KeyStorage struct {
 	AsymmetricPrivKey *rsa.PrivateKey
@@ -67,7 +67,7 @@ func LoadKeyStorageFromDisk() (*KeyStorage, error) {
 		AsymmetricPrivKey: asymKey,
 	}
 
-	_, err = base64.StdEncoding.Decode(ks.SymmetricKey[:], symBytes)
+	_, err = base64.RawStdEncoding.Decode(ks.SymmetricKey[:], symBytes)
 	if err != nil {
 		return nil, errors.New(fmt.Sprintf("cannot parse public key from %s: %s", asymKeyLoc, err.Error()))
 	}
@@ -76,6 +76,13 @@ func LoadKeyStorageFromDisk() (*KeyStorage, error) {
 }
 
 func (ks *KeyStorage) SaveKeyStorageOnDisk() error {
+	if _, err := os.Stat(DiskStorageLocation); os.IsNotExist(err) {
+		err = os.Mkdir(DiskStorageLocation, os.ModePerm)
+		if err != nil {
+			return err
+		}
+	}
+
 	pemdata := pem.EncodeToMemory(&pem.Block{
 		Type:  "RSA PRIVATE KEY",
 		Bytes: x509.MarshalPKCS1PrivateKey(ks.AsymmetricPrivKey),
@@ -85,8 +92,8 @@ func (ks *KeyStorage) SaveKeyStorageOnDisk() error {
 		return err
 	}
 
-	symKeyMarshal := make([]byte, base64.StdEncoding.EncodedLen(len(ks.SymmetricKey)))
-	base64.StdEncoding.Encode(symKeyMarshal, ks.SymmetricKey[:])
+	symKeyMarshal := make([]byte, base64.RawStdEncoding.EncodedLen(len(ks.SymmetricKey)))
+	base64.RawStdEncoding.Encode(symKeyMarshal, ks.SymmetricKey[:])
 	err = ioutil.WriteFile(symKeyLoc, symKeyMarshal, os.ModePerm)
 	if err != nil {
 		_ = os.Remove(asymKeyLoc)
