@@ -117,6 +117,11 @@ func NewGossiper(clientAddress, gossipAddress, name, peers string, simpleBroadca
 
 	g.keychain = ks
 
+	// TODO test PKMapping + chunck Ack then clean
+
+	return nil, errors.New("end")
+	// TODO end clean
+
 	g.startAntiEntropy(time.Duration(AntiEntropyPeriod) * time.Second)
 
 	g.startRouteRumoring(time.Duration(rtimer) * time.Second)

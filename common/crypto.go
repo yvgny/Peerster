@@ -7,12 +7,16 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha256"
+	"crypto/x509"
 	"encoding/base64"
 )
 
-func EncryptText(text string, key *rsa.PublicKey) string {
-	encrypt, _ := rsa.EncryptOAEP(sha256.New(), rand.Reader, key, []byte(text), nil)
-	return base64.RawStdEncoding.EncodeToString(encrypt)
+func EncryptText(text string, key *rsa.PublicKey) (string, error) {
+	encrypt, err := rsa.EncryptOAEP(sha256.New(), rand.Reader, key, []byte(text), nil)
+	if err != nil {
+		return "", err
+	}
+	return base64.RawStdEncoding.EncodeToString(encrypt), nil
 }
 
 func DecryptText(text string, key *rsa.PrivateKey) (string, error) {
@@ -97,9 +101,13 @@ func (id *IdentityPKeyMapping) Sign(key *rsa.PrivateKey) {
 	id.Signature = signature
 }
 
-func (id *IdentityPKeyMapping) VerifySignature(key *rsa.PublicKey) bool {
+func (id *IdentityPKeyMapping) VerifySignature() bool {
 	hash := id.Hash()
-	err := rsa.VerifyPSS(key, crypto.SHA256, hash[:], id.Signature, nil)
+	key, err := x509.ParsePKCS1PublicKey(id.PublicKey)
+	if err != nil {
+		return false
+	}
+	err = rsa.VerifyPSS(key, crypto.SHA256, hash[:], id.Signature, nil)
 	return err == nil
 }
 

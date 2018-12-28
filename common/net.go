@@ -1,7 +1,9 @@
 package common
 
 import (
+	"crypto/rsa"
 	"crypto/sha256"
+	"crypto/x509"
 	"encoding/binary"
 	"errors"
 	"github.com/dedis/protobuf"
@@ -140,6 +142,17 @@ type IdentityPKeyMapping struct {
 	Identity  string
 	PublicKey []byte
 	Signature Signature
+}
+
+func CreateNewIdendityPKeyMapping(identity string, key *rsa.PrivateKey) *IdentityPKeyMapping {
+	id := IdentityPKeyMapping{
+		Identity:  identity,
+		PublicKey: x509.MarshalPKCS1PublicKey(&key.PublicKey),
+	}
+
+	id.Sign(key)
+
+	return &id
 }
 
 type FileUploadMessage struct {
