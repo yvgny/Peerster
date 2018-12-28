@@ -162,6 +162,7 @@ type UploadedFileRequest struct {
 }
 
 type UploadedFileReply struct {
+	Origin      string
 	OwnedChunks []uint32
 	Signature   Signature
 }
