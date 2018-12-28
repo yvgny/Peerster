@@ -153,7 +153,7 @@ type FileUploadAck struct {
 	Origin         string
 	MetaHash       [32]byte
 	UploadedChunks []uint32
-	Signatures     []Signature
+	Signature      Signature
 }
 
 type UploadedFileRequest struct {
@@ -172,7 +172,7 @@ func (b *Block) Hash() (out [32]byte) {
 	h := sha256.New()
 	h.Write(b.PrevHash[:])
 	h.Write(b.Nonce[:])
-	binary.Write(h, binary.LittleEndian, uint32(len(b.Transactions)))
+	_ = binary.Write(h, binary.LittleEndian, uint32(len(b.Transactions)))
 	for _, t := range b.Transactions {
 		th := t.Hash()
 		h.Write(th[:])
@@ -183,9 +183,60 @@ func (b *Block) Hash() (out [32]byte) {
 
 func (t *TxPublish) Hash() (out [32]byte) {
 	h := sha256.New()
-	binary.Write(h, binary.LittleEndian, uint32(len(t.File.Name)))
+	_ = binary.Write(h, binary.LittleEndian, uint32(len(t.File.Name)))
 	h.Write([]byte(t.File.Name))
 	h.Write(t.File.MetafileHash)
+	copy(out[:], h.Sum(nil))
+	return
+}
+
+func (rm *RumorMessage) Hash() (out [32]byte) {
+	h := sha256.New()
+	h.Write([]byte(rm.Origin))
+	_ = binary.Write(h, binary.LittleEndian, rm.ID)
+	h.Write([]byte(rm.Text))
+	copy(out[:], h.Sum(nil))
+	return
+}
+
+func (pm *PrivateMessage) Hash() (out [32]byte) {
+	h := sha256.New()
+	h.Write([]byte(pm.Origin))
+	_ = binary.Write(h, binary.LittleEndian, pm.ID)
+	h.Write([]byte(pm.Text))
+	h.Write([]byte(pm.Destination))
+	copy(out[:], h.Sum(nil))
+	return
+}
+
+func (id *IdentityPKeyMapping) Hash() (out [32]byte) {
+	h := sha256.New()
+	h.Write([]byte(id.Identity))
+	h.Write(id.PublicKey)
+	copy(out[:], h.Sum(nil))
+	return
+}
+
+func (fr *UploadedFileReply) Hash() (out [32]byte) {
+	h := sha256.New()
+	for _, chunk := range fr.OwnedChunks {
+		_ = binary.Write(h, binary.LittleEndian, chunk)
+	}
+	copy(out[:], h.Sum(nil))
+	return
+}
+
+func (fua *FileUploadAck) Hash(chunks [][]byte, nonce [32]byte) (out [32]byte) {
+	if len(chunks) != len(fua.UploadedChunks) {
+		return
+	}
+	h := sha256.New()
+	h.Write([]byte(fua.Origin))
+	for index, chunk := range chunks {
+		_ = binary.Write(h, binary.LittleEndian, fua.UploadedChunks[index])
+		h.Write(chunk)
+	}
+	h.Write(nonce[:])
 	copy(out[:], h.Sum(nil))
 	return
 }
