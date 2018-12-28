@@ -111,16 +111,20 @@ type Block struct {
 
 // Packet exchanged between peers
 type GossipPacket struct {
-	Simple        *SimpleMessage
-	Rumor         *RumorMessage
-	Status        *StatusPacket
-	Private       *PrivateMessage
-	DataRequest   *DataRequest
-	DataReply     *DataReply
-	SearchRequest *SearchRequest
-	SearchReply   *SearchReply
-	TxPublish     *TxPublish
-	BlockPublish  *BlockPublish
+	Simple              *SimpleMessage
+	Rumor               *RumorMessage
+	Status              *StatusPacket
+	Private             *PrivateMessage
+	DataRequest         *DataRequest
+	DataReply           *DataReply
+	SearchRequest       *SearchRequest
+	SearchReply         *SearchReply
+	TxPublish           *TxPublish
+	BlockPublish        *BlockPublish
+	FileUploadAck       *FileUploadAck
+	FileUploadMessage   *FileUploadMessage
+	UploadedFileRequest *UploadedFileRequest
+	UploadedFileReply   *UploadedFileReply
 }
 
 // Packet exchanged with the client
