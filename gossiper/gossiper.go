@@ -409,6 +409,18 @@ func (g *Gossiper) StartGossiper() {
 				} else if gossipPacket.UploadedFileRequest != nil {
 					// Check if we have stored this file and send a list of  all the chunks we own, if we have some.
 					//getlocalrecord
+					metaHash, dest := gossipPacket.UploadedFileRequest.MetaHash, gossipPacket.UploadedFileRequest.Origin
+					hashStr := hex.EncodeToString(metaHash[:])
+					localFile, err := g.data.getLocalRecord(hashStr)
+					if err != nil {
+						return //File does not exist locally
+					}
+					reply := common.UploadedFileReply{Origin: g.name, OwnedChunks:localFile.ChunkMap, Destination:dest }
+					reply.Sign(g.keychain.AsymmetricPrivKey, gossipPacket.UploadedFileRequest.Nonce)
+					hop, exist := g.routingTable.getNextHop(dest)
+					if exist {
+						common.SendMessage(hop, gossipPacket, g.gossipConn)
+					}
 				} else if gossipPacket.UploadedFileReply != nil {
 					//Check when we can reconstruct the file and trigger download when we all chunks somewhere
 					//addchunklocation
