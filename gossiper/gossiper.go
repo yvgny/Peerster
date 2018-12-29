@@ -219,6 +219,8 @@ func (g *Gossiper) StartGossiper() {
 					if err != nil {
 						fmt.Println("Could not search file: " + err.Error())
 					}
+				} else if clientPacket.CloudPacket != nil {
+					// TODO create map (name, metahash) and store it on disk + if present download else upload
 				}
 			}()
 		}

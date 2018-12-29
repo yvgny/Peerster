@@ -53,11 +53,7 @@ type FileDownloadPacket struct {
 	Filename  string
 }
 
-type CloudIndexPacket struct {
-	Filename string
-}
-
-type CloudDownloadPacket struct {
+type CloudPacket struct {
 	Filename string
 }
 
@@ -142,8 +138,7 @@ type ClientPacket struct {
 	GossipPacket
 	FileIndex           *FileIndexPacket
 	FileDownload        *FileDownloadPacket
-	CloudIndexPacket    *CloudIndexPacket
-	CloudDownloadPacket *CloudDownloadPacket
+	CloudPacket    *CloudPacket
 }
 
 type Signature []byte
