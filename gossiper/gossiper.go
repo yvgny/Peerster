@@ -32,6 +32,8 @@ type Gossiper struct {
 	rtimer            int
 	peers             *common.ConcurrentSet
 	clocks            *sync.Map
+	waitStore		  *sync.Map
+	waitUpload		  *sync.Map
 	waitAck           *sync.Map
 	waitData          *sync.Map
 	waitSearchRequest *common.ConcurrentSet
@@ -90,6 +92,8 @@ func NewGossiper(clientAddress, gossipAddress, name, peers string, simpleBroadca
 		peers:             peersSet,
 		rtimer:            rtimer,
 		clocks:            &clocksMap,
+		waitStore:			&sync.Map{},
+		waitUpload:			&sync.Map{},
 		waitAck:           &syncMap,
 		waitData:          &sync.Map{},
 		waitSearchRequest: common.NewConcurrentSet(),
@@ -408,21 +412,28 @@ func (g *Gossiper) StartGossiper() {
 					//Request all the chunks that can be stored and send an ACK once it is done.
 				} else if gossipPacket.UploadedFileRequest != nil {
 					// Check if we have stored this file and send a list of  all the chunks we own, if we have some.
-					//getlocalrecord
-					metaHash, dest := gossipPacket.UploadedFileRequest.MetaHash, gossipPacket.UploadedFileRequest.Origin
+					nonce, dest, metaHash := gossipPacket.UploadedFileRequest.Nonce, gossipPacket.UploadedFileRequest.Origin, gossipPacket.UploadedFileRequest.MetaHash
 					hashStr := hex.EncodeToString(metaHash[:])
 					localFile, err := g.data.getLocalRecord(hashStr)
 					if err != nil {
 						return //File does not exist locally
 					}
-					reply := common.UploadedFileReply{Origin: g.name, OwnedChunks:localFile.ChunkMap, Destination:dest }
-					reply.Sign(g.keychain.AsymmetricPrivKey, gossipPacket.UploadedFileRequest.Nonce)
+					//TODO Add signature of the UploadedFileRequest if time allows
+					reply := common.UploadedFileReply{Origin: g.name, OwnedChunks:localFile.ChunkMap, Destination:dest, Nonce:nonce, MetaHash:metaHash }
+					reply.Sign(g.keychain.AsymmetricPrivKey, nonce)
 					hop, exist := g.routingTable.getNextHop(dest)
 					if exist {
-						common.SendMessage(hop, gossipPacket, g.gossipConn)
+						if err := common.SendMessage(hop, gossipPacket, g.gossipConn); err != nil {
+							println("Could not reply to UploadFileRequest : " + err.Error())
+						}
 					}
 				} else if gossipPacket.UploadedFileReply != nil {
 					//Check when we can reconstruct the file and trigger download when we all chunks somewhere
+					_, dest := gossipPacket.UploadedFileReply.Origin, gossipPacket.UploadedFileReply.Destination
+					//publicKey := origin == nil
+					if dest == g.name && gossipPacket.UploadedFileReply.VerifySignature(nil, gossipPacket.UploadedFileReply.Nonce) {
+						g.data.addChunkLocation()
+					}
 					//addchunklocation
 					//remotefileisamatch
 					//downloadfile avec string vide, fileName output
