@@ -165,18 +165,21 @@ type FileUploadMessage struct {
 
 type FileUploadAck struct {
 	Origin         string
+	Destination    string
 	MetaHash       [32]byte
 	UploadedChunks []uint64
 	Signature      Signature
 }
 
 type UploadedFileRequest struct {
+	Origin   string
 	MetaHash [32]byte
 	Nonce    [32]byte
 }
 
 type UploadedFileReply struct {
 	Origin      string
+	Destination string
 	OwnedChunks []uint64
 	Signature   Signature
 }
@@ -242,6 +245,7 @@ func (id *IdentityPKeyMapping) Hash() (out [32]byte) {
 func (ufr *UploadedFileReply) Hash(nonce [32]byte) (out [32]byte) {
 	h := sha256.New()
 	h.Write([]byte(ufr.Origin))
+	h.Write([]byte(ufr.Destination))
 	for _, chunk := range ufr.OwnedChunks {
 		_ = binary.Write(h, binary.LittleEndian, chunk)
 	}
@@ -258,6 +262,7 @@ func (fua *FileUploadAck) Hash(chunks [][]byte, nonce [32]byte) (out [32]byte) {
 	}
 	h := sha256.New()
 	h.Write([]byte(fua.Origin))
+	h.Write([]byte(fua.Destination))
 	for index, chunk := range chunks {
 		_ = binary.Write(h, binary.LittleEndian, fua.UploadedChunks[index])
 		h.Write(chunk)
