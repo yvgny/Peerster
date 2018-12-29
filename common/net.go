@@ -171,6 +171,7 @@ type FileUploadAck struct {
 }
 
 type UploadedFileRequest struct {
+	Origin	 string
 	MetaHash [32]byte
 	Nonce    [32]byte
 }
