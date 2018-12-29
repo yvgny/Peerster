@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"github.com/Theyiot/Peerster/constants"
 	"github.com/dedis/protobuf"
 	"github.com/yvgny/Peerster/common"
 	"net"
@@ -411,6 +410,18 @@ func (g *Gossiper) StartGossiper() {
 					//USE DATAMANAGER
 				} else if gossipPacket.FileUploadMessage != nil {
 					//Request all the chunks that can be stored and send an ACK once it is done.
+					data, metaHash := gossipPacket.FileUploadMessage.MetaFile, gossipPacket.FileUploadMessage.MetaHash
+					err := g.data.addLocalData(data, metaHash[:])
+					if err != nil {
+						fmt.Println("Could not add local data : " + err.Error())
+					}
+					for i := 0 ; i < len(gossipPacket.FileUploadMessage.MetaFile) / sha256.Size ; i++ {
+						for _, chunk := range gossipPacket.FileUploadMessage.UploadedChunks {
+							if chunk == uint64(i) {
+								continue
+							}
+						}
+					}
 				} else if gossipPacket.UploadedFileRequest != nil {
 					// Check if we have stored this file and send a list of  all the chunks we own, if we have some.
 					nonce, dest, metaHash := gossipPacket.UploadedFileRequest.Nonce, gossipPacket.UploadedFileRequest.Origin, gossipPacket.UploadedFileRequest.MetaHash
@@ -420,12 +431,12 @@ func (g *Gossiper) StartGossiper() {
 						return //File does not exist locally
 					}
 					//TODO Add signature of the UploadedFileRequest if time allows
-					reply := common.UploadedFileReply{Origin: g.name, OwnedChunks:localFile.ChunkMap, Destination:dest, HopLimit:constants.HOP_LIMIT_BIG, MetaHash:metaHash }
+					reply := common.UploadedFileReply{Origin: g.name, OwnedChunks:localFile.ChunkMap, Destination:dest, HopLimit:common.BlockBroadcastHopLimit, MetaHash:metaHash }
 					reply.Sign(g.keychain.AsymmetricPrivKey, nonce)
 					hop, exist := g.routingTable.getNextHop(dest)
 					if exist {
 						if err := common.SendMessage(hop, gossipPacket, g.gossipConn); err != nil {
-							println("Could not reply to UploadFileRequest : " + err.Error())
+							fmt.Println("Could not reply to UploadFileRequest : " + err.Error())
 						}
 					}
 					channel := make(chan *common.UploadedFileReply)
@@ -448,7 +459,7 @@ func (g *Gossiper) StartGossiper() {
 					//publicKey := origin == nil
 					if dest != g.name {
 						if err := g.forwardPacket(gossipPacket); err != nil {
-							println("Could not forward UploadedFileReply : " + err.Error())
+							fmt.Println("Could not forward UploadedFileReply : " + err.Error())
 						}
 						return
 					}
