@@ -1,7 +1,9 @@
 package common
 
 import (
+	"crypto/rsa"
 	"crypto/sha256"
+	"crypto/x509"
 	"encoding/binary"
 	"errors"
 	"github.com/dedis/protobuf"
@@ -142,18 +144,30 @@ type IdentityPKeyMapping struct {
 	Signature Signature
 }
 
+func CreateNewIdendityPKeyMapping(identity string, key *rsa.PrivateKey) *IdentityPKeyMapping {
+	id := IdentityPKeyMapping{
+		Identity:  identity,
+		PublicKey: x509.MarshalPKCS1PublicKey(&key.PublicKey),
+	}
+
+	id.Sign(key)
+
+	return &id
+}
+
 type FileUploadMessage struct {
 	MetaHash       [32]byte
 	MetaFile       []byte
 	HopLimit       uint64
 	UploadedChunks []uint64
+	Nonce          [32]byte
 }
 
 type FileUploadAck struct {
 	Origin         string
 	MetaHash       [32]byte
 	UploadedChunks []uint64
-	Signatures     []Signature
+	Signature      Signature
 }
 
 type UploadedFileRequest struct {
@@ -172,7 +186,7 @@ func (b *Block) Hash() (out [32]byte) {
 	h := sha256.New()
 	h.Write(b.PrevHash[:])
 	h.Write(b.Nonce[:])
-	binary.Write(h, binary.LittleEndian, uint32(len(b.Transactions)))
+	_ = binary.Write(h, binary.LittleEndian, uint32(len(b.Transactions)))
 	for _, t := range b.Transactions {
 		th := t.Hash()
 		h.Write(th[:])
@@ -183,9 +197,72 @@ func (b *Block) Hash() (out [32]byte) {
 
 func (t *TxPublish) Hash() (out [32]byte) {
 	h := sha256.New()
-	binary.Write(h, binary.LittleEndian, uint32(len(t.File.Name)))
-	h.Write([]byte(t.File.Name))
-	h.Write(t.File.MetafileHash)
+	if t.File != nil {
+		_ = binary.Write(h, binary.LittleEndian, uint32(len(t.File.Name)))
+		h.Write([]byte(t.File.Name))
+		h.Write(t.File.MetafileHash)
+	}
+	if t.Mapping != nil {
+		h.Write([]byte(t.Mapping.Identity))
+		h.Write(t.Mapping.PublicKey)
+		h.Write(t.Mapping.Signature)
+	}
+	copy(out[:], h.Sum(nil))
+	return
+}
+
+func (rm *RumorMessage) Hash() (out [32]byte) {
+	h := sha256.New()
+	h.Write([]byte(rm.Origin))
+	_ = binary.Write(h, binary.LittleEndian, rm.ID)
+	h.Write([]byte(rm.Text))
+	copy(out[:], h.Sum(nil))
+	return
+}
+
+func (pm *PrivateMessage) Hash() (out [32]byte) {
+	h := sha256.New()
+	h.Write([]byte(pm.Origin))
+	_ = binary.Write(h, binary.LittleEndian, pm.ID)
+	h.Write([]byte(pm.Text))
+	h.Write([]byte(pm.Destination))
+	copy(out[:], h.Sum(nil))
+	return
+}
+
+func (id *IdentityPKeyMapping) Hash() (out [32]byte) {
+	h := sha256.New()
+	h.Write([]byte(id.Identity))
+	h.Write(id.PublicKey)
+	copy(out[:], h.Sum(nil))
+	return
+}
+
+// The nonce from UploadedFileRequest should be given
+func (ufr *UploadedFileReply) Hash(nonce [32]byte) (out [32]byte) {
+	h := sha256.New()
+	h.Write([]byte(ufr.Origin))
+	for _, chunk := range ufr.OwnedChunks {
+		_ = binary.Write(h, binary.LittleEndian, chunk)
+	}
+	h.Write(nonce[:])
+	copy(out[:], h.Sum(nil))
+	return
+}
+
+// The nonce from FileUploadMessage should be given. The array of chunks is the
+// chunks selected in UploadedChunks
+func (fua *FileUploadAck) Hash(chunks [][]byte, nonce [32]byte) (out [32]byte) {
+	if len(chunks) != len(fua.UploadedChunks) {
+		return
+	}
+	h := sha256.New()
+	h.Write([]byte(fua.Origin))
+	for index, chunk := range chunks {
+		_ = binary.Write(h, binary.LittleEndian, fua.UploadedChunks[index])
+		h.Write(chunk)
+	}
+	h.Write(nonce[:])
 	copy(out[:], h.Sum(nil))
 	return
 }

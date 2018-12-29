@@ -42,6 +42,7 @@ type Gossiper struct {
 	routingTable      *RoutingTable
 	simple            bool
 	blockchain        *Blockchain
+	keychain          *common.KeyStorage
 	mutex             sync.Mutex
 }
 
@@ -100,6 +101,21 @@ func NewGossiper(clientAddress, gossipAddress, name, peers string, simpleBroadca
 		simple:            simpleBroadcastMode,
 		blockchain:        NewBlockchain(),
 	}
+
+	ks, err := common.LoadKeyStorageFromDisk()
+	if err != nil {
+		ks, err = common.GenerateNewKeyStorage()
+		if err != nil {
+			return nil, err
+		}
+
+		err = ks.SaveKeyStorageOnDisk()
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	g.keychain = ks
 
 	g.startAntiEntropy(time.Duration(AntiEntropyPeriod) * time.Second)
 
