@@ -397,15 +397,19 @@ func (g *Gossiper) forwardPacket(packet *common.GossipPacket) error {
 	if packet.Private != nil {
 		dest = packet.Private.Destination
 		hopCount = packet.Private.HopLimit - 1
+		packet.Private.HopLimit = hopCount
 	} else if packet.DataRequest != nil {
 		dest = packet.DataRequest.Destination
 		hopCount = packet.DataRequest.HopLimit - 1
+		packet.DataRequest.HopLimit = hopCount
 	} else if packet.DataReply != nil {
 		dest = packet.DataReply.Destination
 		hopCount = packet.DataReply.HopLimit - 1
+		packet.DataReply.HopLimit = hopCount
 	} else if packet.SearchReply != nil {
 		dest = packet.SearchReply.Destination
 		hopCount = packet.SearchReply.HopLimit - 1
+		packet.SearchReply.HopLimit = hopCount
 	} else {
 		return errors.New("cannot forward packet of this type")
 	}
