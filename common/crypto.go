@@ -50,8 +50,8 @@ func EncryptChunk(chunk []byte, key [32]byte) ([]byte, error) {
 	}
 	ciphertext := aesgsm.Seal(nil, nonce, chunk, nil)
 	final := make([]byte, aesgsm.NonceSize()+len(ciphertext))
-	copy(final[:len(nonce)], nonce)
-	copy(final[len(nonce):], ciphertext)
+	copy(final[:aesgsm.NonceSize()], nonce)
+	copy(final[aesgsm.NonceSize():], ciphertext)
 
 	return final, nil
 }
