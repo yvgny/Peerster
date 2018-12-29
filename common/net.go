@@ -196,9 +196,16 @@ func (b *Block) Hash() (out [32]byte) {
 
 func (t *TxPublish) Hash() (out [32]byte) {
 	h := sha256.New()
-	_ = binary.Write(h, binary.LittleEndian, uint32(len(t.File.Name)))
-	h.Write([]byte(t.File.Name))
-	h.Write(t.File.MetafileHash)
+	if t.File != nil {
+		_ = binary.Write(h, binary.LittleEndian, uint32(len(t.File.Name)))
+		h.Write([]byte(t.File.Name))
+		h.Write(t.File.MetafileHash)
+	}
+	if t.Mapping != nil {
+		h.Write([]byte(t.Mapping.Identity))
+		h.Write(t.Mapping.PublicKey)
+		h.Write(t.Mapping.Signature)
+	}
 	copy(out[:], h.Sum(nil))
 	return
 }
