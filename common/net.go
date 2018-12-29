@@ -53,6 +53,14 @@ type FileDownloadPacket struct {
 	Filename  string
 }
 
+type CloudIndexPacket struct {
+	Filename string
+}
+
+type CloudDownloadPacket struct {
+	Filename string
+}
+
 type DataRequest struct {
 	Origin      string
 	Destination string
@@ -132,8 +140,10 @@ type GossipPacket struct {
 // Packet exchanged with the client
 type ClientPacket struct {
 	GossipPacket
-	FileIndex    *FileIndexPacket
-	FileDownload *FileDownloadPacket
+	FileIndex           *FileIndexPacket
+	FileDownload        *FileDownloadPacket
+	CloudIndexPacket    *CloudIndexPacket
+	CloudDownloadPacket *CloudDownloadPacket
 }
 
 type Signature []byte
@@ -251,6 +261,7 @@ func (ufr *UploadedFileReply) Hash(nonce [32]byte) (out [32]byte) {
 	for _, chunk := range ufr.OwnedChunks {
 		_ = binary.Write(h, binary.LittleEndian, chunk)
 	}
+	h.Write(ufr.MetaHash[:])
 	h.Write(nonce[:])
 	copy(out[:], h.Sum(nil))
 	return
