@@ -238,6 +238,7 @@ func (id *IdentityPKeyMapping) Hash() (out [32]byte) {
 	return
 }
 
+// The nonce from UploadedFileRequest should be given
 func (ufr *UploadedFileReply) Hash(nonce [32]byte) (out [32]byte) {
 	h := sha256.New()
 	h.Write([]byte(ufr.Origin))
@@ -249,6 +250,8 @@ func (ufr *UploadedFileReply) Hash(nonce [32]byte) (out [32]byte) {
 	return
 }
 
+// The nonce from FileUploadMessage should be given. The array of chunks is the
+// chunks selected in UploadedChunks
 func (fua *FileUploadAck) Hash(chunks [][]byte, nonce [32]byte) (out [32]byte) {
 	if len(chunks) != len(fua.UploadedChunks) {
 		return

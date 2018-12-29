@@ -11,6 +11,7 @@ import (
 	"encoding/base64"
 )
 
+// Returns the base64-encoded version of the encrypted string
 func EncryptText(text string, key *rsa.PublicKey) (string, error) {
 	encrypt, err := rsa.EncryptOAEP(sha256.New(), rand.Reader, key, []byte(text), nil)
 	if err != nil {
@@ -19,6 +20,7 @@ func EncryptText(text string, key *rsa.PublicKey) (string, error) {
 	return base64.RawStdEncoding.EncodeToString(encrypt), nil
 }
 
+// Takes a base64-encoded cipher an returns the decoded string
 func DecryptText(text string, key *rsa.PrivateKey) (string, error) {
 	encrypted, err := base64.RawStdEncoding.DecodeString(text)
 	if err != nil {
@@ -31,6 +33,7 @@ func DecryptText(text string, key *rsa.PrivateKey) (string, error) {
 	return string(decrypted), nil
 }
 
+// Encrypt a chunk with a symmetric key
 func EncryptChunk(chunk []byte, key [32]byte) ([]byte, error) {
 	block, err := aes.NewCipher(key[:])
 	if err != nil {
@@ -53,6 +56,7 @@ func EncryptChunk(chunk []byte, key [32]byte) ([]byte, error) {
 	return final, nil
 }
 
+// Decrypt a chunk using a symmetric key
 func DecryptChunk(ciphertext []byte, key [32]byte) ([]byte, error) {
 	block, err := aes.NewCipher(key[:])
 	if err != nil {
@@ -111,6 +115,8 @@ func (id *IdentityPKeyMapping) VerifySignature() bool {
 	return err == nil
 }
 
+// The nonce from FileUploadMessage should be given. The array of chunks is the
+// chunks selected in UploadedChunks
 func (fua *FileUploadAck) Sign(key *rsa.PrivateKey, nonce [32]byte, chunks [][]byte) {
 	if len(chunks) != len(fua.UploadedChunks) {
 		return
@@ -119,6 +125,8 @@ func (fua *FileUploadAck) Sign(key *rsa.PrivateKey, nonce [32]byte, chunks [][]b
 	fua.Signature, _ = rsa.SignPSS(rand.Reader, key, crypto.SHA256, hash[:], nil)
 }
 
+// The nonce from FileUploadMessage should be given. The array of chunks is the
+// chunks selected in UploadedChunks
 func (fua *FileUploadAck) VerifySignature(key *rsa.PublicKey, nonce [32]byte, chunks [][]byte) bool {
 	if len(chunks) != len(fua.UploadedChunks) {
 		return false
@@ -128,11 +136,13 @@ func (fua *FileUploadAck) VerifySignature(key *rsa.PublicKey, nonce [32]byte, ch
 	return err == nil
 }
 
+// The nonce from UploadedFileRequest should be given
 func (ufr *UploadedFileReply) Sign(key *rsa.PrivateKey, nonce [32]byte) {
 	hash := ufr.Hash(nonce)
 	ufr.Signature, _ = rsa.SignPSS(rand.Reader, key, crypto.SHA256, hash[:], nil)
 }
 
+// The nonce from UploadedFileRequest should be given
 func (ufr *UploadedFileReply) VerifySignature(key *rsa.PublicKey, nonce [32]byte) bool {
 	hash := ufr.Hash(nonce)
 	err := rsa.VerifyPSS(key, crypto.SHA256, hash[:], ufr.Signature, nil)
