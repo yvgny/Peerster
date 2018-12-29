@@ -181,8 +181,8 @@ type UploadedFileReply struct {
 	Origin      string
 	Destination string
 	OwnedChunks []uint64
+	HopLimit    uint32
 	MetaHash 	[32]byte
-	Nonce    	[32]byte
 	Signature   Signature
 }
 

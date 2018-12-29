@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"github.com/Theyiot/Peerster/constants"
 	"github.com/dedis/protobuf"
 	"github.com/yvgny/Peerster/common"
 	"net"
@@ -32,8 +33,8 @@ type Gossiper struct {
 	rtimer            int
 	peers             *common.ConcurrentSet
 	clocks            *sync.Map
-	waitStore		  *sync.Map
-	waitUpload		  *sync.Map
+	waitCloudStorage  *sync.Map
+	waitCloudRequest  *sync.Map
 	waitAck           *sync.Map
 	waitData          *sync.Map
 	waitSearchRequest *common.ConcurrentSet
@@ -92,8 +93,8 @@ func NewGossiper(clientAddress, gossipAddress, name, peers string, simpleBroadca
 		peers:             peersSet,
 		rtimer:            rtimer,
 		clocks:            &clocksMap,
-		waitStore:			&sync.Map{},
-		waitUpload:			&sync.Map{},
+		waitCloudStorage:	&sync.Map{},
+		waitCloudRequest:	&sync.Map{},
 		waitAck:           &syncMap,
 		waitData:          &sync.Map{},
 		waitSearchRequest: common.NewConcurrentSet(),
@@ -413,13 +414,13 @@ func (g *Gossiper) StartGossiper() {
 				} else if gossipPacket.UploadedFileRequest != nil {
 					// Check if we have stored this file and send a list of  all the chunks we own, if we have some.
 					nonce, dest, metaHash := gossipPacket.UploadedFileRequest.Nonce, gossipPacket.UploadedFileRequest.Origin, gossipPacket.UploadedFileRequest.MetaHash
-					hashStr := hex.EncodeToString(metaHash[:])
-					localFile, err := g.data.getLocalRecord(hashStr)
+					metaHashStr := hex.EncodeToString(metaHash[:])
+					localFile, err := g.data.getLocalRecord(metaHashStr)
 					if err != nil {
 						return //File does not exist locally
 					}
 					//TODO Add signature of the UploadedFileRequest if time allows
-					reply := common.UploadedFileReply{Origin: g.name, OwnedChunks:localFile.ChunkMap, Destination:dest, Nonce:nonce, MetaHash:metaHash }
+					reply := common.UploadedFileReply{Origin: g.name, OwnedChunks:localFile.ChunkMap, Destination:dest, HopLimit:constants.HOP_LIMIT_BIG, MetaHash:metaHash }
 					reply.Sign(g.keychain.AsymmetricPrivKey, nonce)
 					hop, exist := g.routingTable.getNextHop(dest)
 					if exist {
@@ -427,16 +428,35 @@ func (g *Gossiper) StartGossiper() {
 							println("Could not reply to UploadFileRequest : " + err.Error())
 						}
 					}
+					channel := make(chan *common.UploadedFileReply)
+					g.waitCloudRequest.Store(metaHashStr, channel)
+					go func() {
+						select {
+						case reply := <- channel:
+							if reply.VerifySignature(nil, nonce) {
+								//TODO HANDLE FILENAMES
+								g.data.addChunkLocation(metaHashStr, "", reply.OwnedChunks, localFile.ChunkCount, reply.Origin)
+								if g.data.remoteFileIsMatch(metaHashStr) {
+									g.downloadFile("", metaHash[:], "")
+								}
+							}
+						}
+					}()
 				} else if gossipPacket.UploadedFileReply != nil {
 					//Check when we can reconstruct the file and trigger download when we all chunks somewhere
 					_, dest := gossipPacket.UploadedFileReply.Origin, gossipPacket.UploadedFileReply.Destination
 					//publicKey := origin == nil
-					if dest == g.name && gossipPacket.UploadedFileReply.VerifySignature(nil, gossipPacket.UploadedFileReply.Nonce) {
-						g.data.addChunkLocation()
+					if dest != g.name {
+						if err := g.forwardPacket(gossipPacket); err != nil {
+							println("Could not forward UploadedFileReply : " + err.Error())
+						}
+						return
 					}
-					//addchunklocation
-					//remotefileisamatch
-					//downloadfile avec string vide, fileName output
+					channel, exist := g.waitCloudRequest.Load(hex.EncodeToString(gossipPacket.UploadedFileReply.MetaHash[:]))
+					if !exist {
+						return
+					}
+					channel.(chan *common.UploadedFileReply) <- gossipPacket.UploadedFileReply
 				}
 			}()
 		}
@@ -458,6 +478,10 @@ func (g *Gossiper) forwardPacket(packet *common.GossipPacket) error {
 	} else if packet.SearchReply != nil {
 		dest = packet.SearchReply.Destination
 		hopCount = packet.SearchReply.HopLimit - 1
+	} else if packet.UploadedFileReply != nil {
+		dest = packet.UploadedFileReply.Destination
+		hopCount = packet.UploadedFileReply.HopLimit - 1
+		packet.UploadedFileReply.HopLimit = packet.UploadedFileReply.HopLimit - 1
 	} else {
 		return errors.New("cannot forward packet of this type")
 	}
