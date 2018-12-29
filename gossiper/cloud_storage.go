@@ -111,5 +111,5 @@ func (g *Gossiper) DownloadFileFromCloud(metafileHash string) error {
 
 func (g *Gossiper) UploadFileToCloud(filename string) (string, error) {
 	// TODO
-	return nil
+	return "", nil
 }
