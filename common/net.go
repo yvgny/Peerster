@@ -160,6 +160,7 @@ type FileUploadMessage struct {
 	MetaFile       []byte
 	HopLimit       uint32
 	UploadedChunks []uint32
+	Nonce          [32]byte
 }
 
 type FileUploadAck struct {
@@ -237,11 +238,13 @@ func (id *IdentityPKeyMapping) Hash() (out [32]byte) {
 	return
 }
 
-func (fr *UploadedFileReply) Hash() (out [32]byte) {
+func (ufr *UploadedFileReply) Hash(nonce [32]byte) (out [32]byte) {
 	h := sha256.New()
-	for _, chunk := range fr.OwnedChunks {
+	h.Write([]byte(ufr.Origin))
+	for _, chunk := range ufr.OwnedChunks {
 		_ = binary.Write(h, binary.LittleEndian, chunk)
 	}
+	h.Write(nonce[:])
 	copy(out[:], h.Sum(nil))
 	return
 }

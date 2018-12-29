@@ -127,3 +127,14 @@ func (fua *FileUploadAck) VerifySignature(key *rsa.PublicKey, nonce [32]byte, ch
 	err := rsa.VerifyPSS(key, crypto.SHA256, hash[:], fua.Signature, nil)
 	return err == nil
 }
+
+func (ufr *UploadedFileReply) Sign(key *rsa.PrivateKey, nonce [32]byte) {
+	hash := ufr.Hash(nonce)
+	ufr.Signature, _ = rsa.SignPSS(rand.Reader, key, crypto.SHA256, hash[:], nil)
+}
+
+func (ufr *UploadedFileReply) VerifySignature(key *rsa.PublicKey, nonce [32]byte) bool {
+	hash := ufr.Hash(nonce)
+	err := rsa.VerifyPSS(key, crypto.SHA256, hash[:], ufr.Signature, nil)
+	return err == nil
+}
