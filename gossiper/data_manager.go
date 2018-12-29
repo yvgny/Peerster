@@ -10,12 +10,13 @@ import (
 	"io/ioutil"
 	"math/rand"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"sync"
 )
 
-const DataCacheFolder = ".peerster"
+var DataCacheFolder = path.Join(common.HiddenStorageFolder, "chunks")
 
 type DataManager struct {
 	sync.RWMutex
