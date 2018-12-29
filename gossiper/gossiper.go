@@ -42,6 +42,7 @@ type Gossiper struct {
 	privateMessages   *Mail
 	data              *DataManager
 	routingTable      *RoutingTable
+	cloudStorage      *CloudStorage
 	simple            bool
 	blockchain        *Blockchain
 	keychain          *common.KeyStorage
@@ -92,8 +93,8 @@ func NewGossiper(clientAddress, gossipAddress, name, peers string, simpleBroadca
 		peers:             peersSet,
 		rtimer:            rtimer,
 		clocks:            &clocksMap,
-		waitCloudStorage:	&sync.Map{},
-		waitCloudRequest:	&sync.Map{},
+		waitCloudStorage:  &sync.Map{},
+		waitCloudRequest:  &sync.Map{},
 		waitAck:           &syncMap,
 		waitData:          &sync.Map{},
 		waitSearchRequest: common.NewConcurrentSet(),
@@ -118,6 +119,13 @@ func NewGossiper(clientAddress, gossipAddress, name, peers string, simpleBroadca
 			return nil, err
 		}
 	}
+
+	var cs *CloudStorage
+	cs, err = LoadCloudStorageFromDisk()
+	if err != nil {
+		cs = CreateNewCloudStorage()
+	}
+	g.cloudStorage = cs
 
 	g.keychain = ks
 
@@ -220,7 +228,26 @@ func (g *Gossiper) StartGossiper() {
 						fmt.Println("Could not search file: " + err.Error())
 					}
 				} else if clientPacket.CloudPacket != nil {
-					// TODO create map (name, metahash) and store it on disk + if present download else upload
+					filename := clientPacket.CloudPacket.Filename
+					if exists := g.cloudStorage.Exists(filename); exists {
+						hash, _ := g.cloudStorage.GetHashOfFile(filename)
+						err = g.DownloadFileFromCloud(hash)
+						if err != nil {
+							fmt.Printf("Cannot download file from cloud: %s\n", err.Error())
+							return
+						}
+					} else {
+						hash, err := g.UploadFileToCloud(filename)
+						if err != nil {
+							fmt.Printf("Cannot upload file to cloud: %s\n", err.Error())
+							return
+						}
+						err = g.cloudStorage.AddMapping(filename, hash)
+						if err != nil {
+							fmt.Printf("Cannot save cloud record on disk: %s\n", err.Error())
+							return
+						}
+					}
 				}
 			}()
 		}
@@ -417,7 +444,7 @@ func (g *Gossiper) StartGossiper() {
 					if err != nil {
 						fmt.Println("Could not add local data : " + err.Error())
 					}
-					for i := 0 ; i < len(gossipPacket.FileUploadMessage.MetaFile) / sha256.Size ; i++ {
+					for i := 0; i < len(gossipPacket.FileUploadMessage.MetaFile)/sha256.Size; i++ {
 						for _, chunk := range gossipPacket.FileUploadMessage.UploadedChunks {
 							if chunk == uint64(i) {
 								continue
@@ -433,7 +460,13 @@ func (g *Gossiper) StartGossiper() {
 						return //File does not exist locally
 					}
 					//TODO Add signature of the UploadedFileRequest if time allows
-					reply := common.UploadedFileReply{Origin: g.name, OwnedChunks:localFile.ChunkMap, Destination:dest, HopLimit:common.BlockBroadcastHopLimit, MetaHash:metaHash }
+					reply := common.UploadedFileReply{
+						Origin:      g.name,
+						OwnedChunks: localFile.ChunkMap,
+						Destination: dest,
+						HopLimit:    DefaultHopLimit,
+						MetaHash:    metaHash,
+					}
 					reply.Sign(g.keychain.AsymmetricPrivKey, nonce)
 					hop, exist := g.routingTable.getNextHop(dest)
 					if exist {
@@ -445,7 +478,7 @@ func (g *Gossiper) StartGossiper() {
 					g.waitCloudRequest.Store(metaHashStr, channel)
 					go func() {
 						select {
-						case reply := <- channel:
+						case reply := <-channel:
 							if reply.VerifySignature(nil, nonce) {
 								//TODO HANDLE FILENAMES
 								g.data.addChunkLocation(metaHashStr, "", reply.OwnedChunks, localFile.ChunkCount, reply.Origin)
