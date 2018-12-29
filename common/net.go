@@ -145,14 +145,14 @@ type IdentityPKeyMapping struct {
 type FileUploadMessage struct {
 	MetaHash       [32]byte
 	MetaFile       []byte
-	HopLimit       uint32
-	UploadedChunks []uint32
+	HopLimit       uint64
+	UploadedChunks []uint64
 }
 
 type FileUploadAck struct {
 	Origin         string
 	MetaHash       [32]byte
-	UploadedChunks []uint32
+	UploadedChunks []uint64
 	Signatures     []Signature
 }
 
@@ -163,7 +163,7 @@ type UploadedFileRequest struct {
 
 type UploadedFileReply struct {
 	Origin      string
-	OwnedChunks []uint32
+	OwnedChunks []uint64
 	Signature   Signature
 }
 
