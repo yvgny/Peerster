@@ -385,6 +385,14 @@ func (g *Gossiper) StartGossiper() {
 						addrStr := addr.String()
 						common.BroadcastMessage(g.peers.Elements(), gossipPacket, &addrStr, g.gossipConn)
 					}
+				} else if gossipPacket.FileUploadAck != nil {
+					//Note which chunks have been downloaded
+				} else if gossipPacket.FileUploadMessage != nil {
+					//Request all the chunks that can be stored and send an ACK once it is done.
+				} else if gossipPacket.UploadedFileRequest != nil {
+					// Check if we have stored this file and send a list of  all the chunks we own, if we have some.
+				} else if gossipPacket.UploadedFileReply != nil {
+					//Check when we can reconstruct the file and trigger download when we all chunks somewhere
 				}
 			}()
 		}
