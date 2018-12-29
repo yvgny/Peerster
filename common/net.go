@@ -53,6 +53,14 @@ type FileDownloadPacket struct {
 	Filename  string
 }
 
+type CloudIndexPacket struct {
+	Filename string
+}
+
+type CloudDownloadPacket struct {
+	Filename string
+}
+
 type DataRequest struct {
 	Origin      string
 	Destination string
@@ -132,8 +140,10 @@ type GossipPacket struct {
 // Packet exchanged with the client
 type ClientPacket struct {
 	GossipPacket
-	FileIndex    *FileIndexPacket
-	FileDownload *FileDownloadPacket
+	FileIndex           *FileIndexPacket
+	FileDownload        *FileDownloadPacket
+	CloudIndexPacket    *CloudIndexPacket
+	CloudDownloadPacket *CloudDownloadPacket
 }
 
 type Signature []byte
