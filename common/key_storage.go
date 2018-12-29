@@ -24,6 +24,7 @@ type KeyStorage struct {
 	SymmetricKey      [32]byte
 }
 
+// Create a new key pair, without storing it on the disk
 func GenerateNewKeyStorage() (*KeyStorage, error) {
 	privKey, err := rsa.GenerateKey(rand.Reader, RsaKeyBitLength)
 	if err != nil {
@@ -75,6 +76,8 @@ func LoadKeyStorageFromDisk() (*KeyStorage, error) {
 	return &ks, nil
 }
 
+// Save the keys on the disk. If a previous version is already stored, it
+// will be replaced
 func (ks *KeyStorage) SaveKeyStorageOnDisk() error {
 	if _, err := os.Stat(DiskStorageLocation); os.IsNotExist(err) {
 		err = os.Mkdir(DiskStorageLocation, os.ModePerm)
