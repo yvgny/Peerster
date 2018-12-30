@@ -3,6 +3,7 @@ package common
 import "time"
 
 const SharedFilesFolder = "_SharedFiles"
+const CloudFilesUploadFolder = SharedFilesFolder
 const DefaultBudget = 2
 const MaxBudget = 32
 const MatchThreshold = 2

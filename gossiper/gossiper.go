@@ -149,7 +149,8 @@ func NewGossiper(clientAddress, gossipAddress, name, peers string, simpleBroadca
 			}
 		}
 	}()
-	g.blockchain.startMining(newBlocks)
+	// TODO put back
+	// g.blockchain.startMining(newBlocks)
 
 	return g, nil
 }
@@ -229,23 +230,10 @@ func (g *Gossiper) StartGossiper() {
 					}
 				} else if clientPacket.CloudPacket != nil {
 					filename := clientPacket.CloudPacket.Filename
-					if exists := g.cloudStorage.Exists(filename); exists {
-						err = g.DownloadFileFromCloud(filename)
-						if err != nil {
-							fmt.Printf("Cannot download file from cloud: %s\n", err.Error())
-							return
-						}
-					} else {
-						hash, err := g.UploadFileToCloud(filename)
-						if err != nil {
-							fmt.Printf("Cannot upload file to cloud: %s\n", err.Error())
-							return
-						}
-						err = g.cloudStorage.AddMapping(filename, hash)
-						if err != nil {
-							fmt.Printf("Cannot save cloud record on disk: %s\n", err.Error())
-							return
-						}
+					err = g.HandleClientCloudRequest(filename)
+					if err != nil {
+						fmt.Println(err.Error())
+						return
 					}
 				}
 			}()

@@ -11,6 +11,7 @@ import (
 	"math/rand"
 	"os"
 	"path"
+	"path/filepath"
 	"sync"
 	"time"
 )
@@ -57,7 +58,7 @@ func LoadCloudStorageFromDisk() (*CloudStorage, error) {
 	}, nil
 }
 
-func (cs *CloudStorage) GetALlMappings() map[string]string {
+func (cs *CloudStorage) GetAllMappings() map[string]string {
 	cs.RLock()
 	defer cs.RUnlock()
 	mapCopy := make(map[string]string)
@@ -179,7 +180,7 @@ func (g *Gossiper) DownloadFileFromCloud(filename string) error {
 
 func (g *Gossiper) UploadFileToCloud(filename string) (string, error) {
 	//TODO Choose right path for files to upload
-	metaHashSlice, err := g.data.addLocalFile(filename, &g.keychain.SymmetricKey)
+	metaHashSlice, err := g.data.addLocalFile(filepath.Join(common.CloudFilesUploadFolder, filename), &g.keychain.SymmetricKey)
 	if err != nil {
 		return "", err
 	}
@@ -245,6 +246,27 @@ func (g *Gossiper) UploadFileToCloud(filename string) (string, error) {
 
 	return metaHashStr, nil
 }
+
+func (g *Gossiper) HandleClientCloudRequest(filename string) error {
+	if exists := g.cloudStorage.Exists(filename); exists {
+		err := g.DownloadFileFromCloud(filename)
+		if err != nil {
+			return errors.New(fmt.Sprintf("Cannot download file from cloud: %s\n", err.Error()))
+		}
+	} else {
+		hash, err := g.UploadFileToCloud(filename)
+		if err != nil {
+			return errors.New(fmt.Sprintf("Cannot upload file to cloud: %s\n", err.Error()))
+		}
+		err = g.cloudStorage.AddMapping(filename, hash)
+		if err != nil {
+			return errors.New(fmt.Sprintf("Cannot save cloud record on disk: %s\n", err.Error()))
+		}
+	}
+
+	return nil
+}
+
 func generateNonce() [32]byte {
 	var nonce [32]byte
 	_, _ = rand.Read(nonce[:])
