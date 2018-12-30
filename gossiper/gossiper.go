@@ -442,7 +442,7 @@ func (g *Gossiper) StartGossiper() {
 						return
 					}
 					downloadedChunks := make([]uint64, 0)
-					for i := 0; i < len(message.MetaFile)/sha256.Size; i++ {
+					for i := 1; i < len(message.MetaFile)/sha256.Size + 1; i++ {
 						for _, chunk := range message.UploadedChunks {
 							if chunk == uint64(i) {
 								continue
@@ -451,7 +451,6 @@ func (g *Gossiper) StartGossiper() {
 						err := g.downloadChunk(dest, metaFile[i*sha256.Size:(i+1)*sha256.Size], i)
 						if err != nil {
 							fmt.Printf("Could not download chunk %d : %s\n", i, err.Error())
-							return
 						} else {
 							downloadedChunks = append(downloadedChunks, uint64(i))
 						}
