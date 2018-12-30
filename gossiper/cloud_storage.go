@@ -1,7 +1,6 @@
 package gossiper
 
 import (
-	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -130,10 +129,7 @@ func (g *Gossiper) DownloadFileFromCloud(filename string) error {
 	}
 	copy(metaHash[:], metaHashSlice)
 
-	nonce, err := generateNonce()
-	if err != nil {
-		return err
-	}
+	nonce := generateNonce()
 
 	localFile, err := g.data.getLocalRecord(metaHashStr)
 	if err != nil {
@@ -184,10 +180,7 @@ func (g *Gossiper) UploadFileToCloud(filename string) (string, error) {
 		return "", err
 	}
 
-	nonce, err := generateNonce()
-	if err != nil {
-		return "", err
-	}
+	nonce := generateNonce()
 
 	message := common.FileUploadMessage{ Origin:g.name, UploadedChunks:[]uint64{}, Nonce:nonce, MetaHash:metaHash,
 		MetaFile: metaFile, HopLimit:common.BlockBroadcastHopLimit }
@@ -229,15 +222,9 @@ func (g *Gossiper) UploadFileToCloud(filename string) (string, error) {
 
 	return metaHashStr, nil
 }
-
-func generateNonce() ([32]byte, error) {
+func generateNonce() [32]byte {
 	var nonce [32]byte
-	randNonce := make([]byte, sha256.Size)
-	_, err := rand.Read(randNonce)
-	if err != nil {
-		return nonce, err
-	}
-	copy(nonce[:], randNonce)
+	_, _ = rand.Read(nonce[:])
 
-	return nonce, nil
+	return nonce
 }
