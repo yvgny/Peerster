@@ -52,6 +52,17 @@ func LoadCloudStorageFromDisk() (*CloudStorage, error) {
 	}, nil
 }
 
+func (cs *CloudStorage) GetALlMappings() map[string]string {
+	cs.RLock()
+	defer cs.RUnlock()
+	mapCopy := make(map[string]string)
+	for key, value := range cs.mappings {
+		mapCopy[key] = value
+	}
+
+	return mapCopy
+}
+
 func (cs *CloudStorage) GetHashOfFile(filename string) (string, bool) {
 	cs.RLock()
 	defer cs.RUnlock()
