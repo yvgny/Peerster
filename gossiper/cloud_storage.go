@@ -137,13 +137,13 @@ func (g *Gossiper) DownloadFileFromCloud(filename string) error {
 	}
 
 	request := common.GossipPacket{ UploadedFileRequest:&common.UploadedFileRequest{ Origin:g.name, Nonce:nonce, MetaHash:metaHash }}
-	relayAddr := g.gossipAddress.String()
-	common.BroadcastMessage(g.peers.Elements(), request, &relayAddr, g.gossipConn)
+	common.BroadcastMessage(g.peers.Elements(), request, nil, g.gossipConn)
 
 	channel := make(chan *common.UploadedFileReply)
 	g.waitCloudRequest.Store(metaHashStr, channel)
 	go func() {
 		for {
+			timer := time.NewTimer(common.CloudSearchTimeout)
 			select {
 			case reply := <- channel:
 				//TODO : get public key, to verify signature
@@ -157,8 +157,12 @@ func (g *Gossiper) DownloadFileFromCloud(filename string) error {
 						fmt.Println("Could not download file : " + err.Error())
 					}
 					_ = g.data.removeLocalFile(metaHashStr)
+					g.waitCloudRequest.Delete(metaHashStr)
 					return
 				}
+			case <-timer.C:
+				fmt.Println("Could not download file: peer replies timeout")
+				g.waitCloudRequest.Delete(metaHashStr)
 			}
 		}
 	}()
