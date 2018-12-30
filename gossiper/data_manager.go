@@ -131,14 +131,14 @@ func (dm *DataManager) removeLocalFile(metafileHash string) error {
 		return err
 	}
 
-	if len(metafile) % sha256.Size != 0 {
+	if len(metafile)%sha256.Size != 0 {
 		return errors.New("cannot remove local file: invalid metafile length")
 	}
 
 	for i := 0; i < len(metafile); i += sha256.Size {
 		metahash := metafile[i : i+sha256.Size]
 		chunkHex := hex.EncodeToString(metahash)
-		dm.localFiles.Delete(chunkHex)
+		_ = os.Remove(filepath.Join(DataCacheFolder, chunkHex))
 	}
 
 	dm.localFiles.Delete(metafileHash)
@@ -146,8 +146,9 @@ func (dm *DataManager) removeLocalFile(metafileHash string) error {
 	return nil
 }
 
-// Index a new file and returns the hash of its meta file
-func (dm *DataManager) addLocalFile(path string) ([]byte, error) {
+// Index a new file and returns the hash of its meta file. If a key is given, the chunks are encrypted
+// with symmetric encryption. Otherwise a nil value can be given and chunks a stored in plaintext
+func (dm *DataManager) addLocalFile(path string, key *[32]byte) ([]byte, error) {
 	file, err := os.Open(path)
 	if err != nil {
 		return nil, err
@@ -174,6 +175,12 @@ func (dm *DataManager) addLocalFile(path string) ([]byte, error) {
 		}
 
 		dataChunk := buffer[:bytesread]
+		if key != nil {
+			dataChunk, err = common.EncryptChunk(dataChunk, *key)
+			if err != nil {
+				return nil, err
+			}
+		}
 		chunkHash := sha256.Sum256(dataChunk)
 		filename := hex.EncodeToString(chunkHash[:])
 		err = ioutil.WriteFile(filepath.Join(DataCacheFolder, filename), dataChunk, os.ModePerm)

@@ -152,10 +152,11 @@ func (g *Gossiper) DownloadFileFromCloud(filename string) error {
 				}
 				g.data.addChunkLocation(metaHashStr, filename, reply.OwnedChunks, localFile.ChunkCount, reply.Origin)
 				if g.data.remoteFileIsMatch(metaHashStr) {
-					err = g.downloadFile("", metaHash[:], filename)
+					err = g.downloadFile("", metaHash[:], filename, &g.keychain.SymmetricKey)
 					if err != nil {
 						fmt.Println("Could not download file : " + err.Error())
 					}
+					_ = g.data.removeLocalFile(metaHashStr)
 					return
 				}
 			}
@@ -167,7 +168,7 @@ func (g *Gossiper) DownloadFileFromCloud(filename string) error {
 
 func (g *Gossiper) UploadFileToCloud(filename string) (string, error) {
 	//TODO Choose right path for files to upload
-	metaHashSlice, err := g.data.addLocalFile(filename)
+	metaHashSlice, err := g.data.addLocalFile(filename, &g.keychain.SymmetricKey)
 	if err != nil {
 		return "", err
 	}

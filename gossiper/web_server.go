@@ -221,7 +221,7 @@ func (g *Gossiper) postFileToIndexHandler(writer http.ResponseWriter, request *h
 	}
 	filename := request.Form.Get("Filename")
 
-	hash, err := g.data.addLocalFile(filepath.Join(common.SharedFilesFolder, filename))
+	hash, err := g.data.addLocalFile(filepath.Join(common.SharedFilesFolder, filename), nil)
 	if err != nil {
 		writeErrorToHTTP(writer, err)
 		fmt.Println(err.Error())
@@ -249,7 +249,7 @@ func (g *Gossiper) postFileToDownload(writer http.ResponseWriter, request *http.
 		fmt.Println(err.Error())
 	}
 
-	err = g.downloadFile(user, hash, filename)
+	err = g.downloadFile(user, hash, filename, nil)
 	if err != nil {
 		writeErrorToHTTP(writer, err)
 		fmt.Println(err.Error())

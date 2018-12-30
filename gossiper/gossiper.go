@@ -197,7 +197,7 @@ func (g *Gossiper) StartGossiper() {
 						fmt.Println(err.Error())
 					}
 				} else if clientPacket.FileIndex != nil {
-					hash, err := g.data.addLocalFile(filepath.Join(common.SharedFilesFolder, clientPacket.FileIndex.Filename))
+					hash, err := g.data.addLocalFile(filepath.Join(common.SharedFilesFolder, clientPacket.FileIndex.Filename), nil)
 					if err != nil {
 						fmt.Println(err.Error())
 					}
@@ -217,7 +217,7 @@ func (g *Gossiper) StartGossiper() {
 						fmt.Println("Cannot index file: name already exists in blockchain")
 					}
 				} else if clientPacket.FileDownload != nil {
-					err = g.downloadFile(clientPacket.FileDownload.User, clientPacket.FileDownload.HashValue, clientPacket.FileDownload.Filename)
+					err = g.downloadFile(clientPacket.FileDownload.User, clientPacket.FileDownload.HashValue, clientPacket.FileDownload.Filename, nil)
 					if err != nil {
 						fmt.Println(err.Error())
 					}
@@ -581,7 +581,7 @@ func (g *Gossiper) forwardPacket(packet *common.GossipPacket) error {
 	return nil
 }
 
-func (g *Gossiper) downloadFile(user string, hash []byte, filename string) error {
+func (g *Gossiper) downloadFile(user string, hash []byte, filename string, key *[32]byte) error {
 	metafileHash := hex.EncodeToString(hash)
 
 	// returns the the tuple (peer_name, next_hop, valid)
@@ -680,7 +680,13 @@ func (g *Gossiper) downloadFile(user string, hash []byte, filename string) error
 								fmt.Println(errors.New("skipping chunk: cannot download chunk: " + err.Error()))
 								break loop
 							}
-							_, err = f.Write(chunck.Data)
+							toFile := chunck.Data
+							if key != nil {
+								toFile, err = common.DecryptChunk(chunck.Data, *key)
+								fmt.Println(errors.New("skipping chunk: cannot download chunk: " + err.Error()))
+								break loop
+							}
+							_, err = f.Write(toFile)
 							if err != nil {
 								fmt.Println(errors.New("Unable to write in file: " + err.Error()))
 							}
