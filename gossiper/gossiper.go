@@ -408,23 +408,53 @@ func (g *Gossiper) StartGossiper() {
 				} else if gossipPacket.FileUploadAck != nil {
 					//Note which chunks have been downloaded
 					//USE DATAMANAGER
-				} else if gossipPacket.FileUploadMessage != nil {
+				} else if message := gossipPacket.FileUploadMessage; message != nil {
 					//Request all the chunks that can be stored and send an ACK once it is done.
-					data, metaHash := gossipPacket.FileUploadMessage.MetaFile, gossipPacket.FileUploadMessage.MetaHash
+					data, metaHash, metaFile, dest := message.MetaFile, message.MetaHash, message.MetaFile, message.Origin
 					err := g.data.addLocalData(data, metaHash[:])
 					if err != nil {
 						fmt.Println("Could not add local data : " + err.Error())
 					}
-					for i := 0 ; i < len(gossipPacket.FileUploadMessage.MetaFile) / sha256.Size ; i++ {
-						for _, chunk := range gossipPacket.FileUploadMessage.UploadedChunks {
+					downloadedChunks := make([]uint64, 0)
+					for i := 0 ; i < len(message.MetaFile) / sha256.Size ; i++ {
+						for _, chunk := range message.UploadedChunks {
 							if chunk == uint64(i) {
 								continue
 							}
 						}
+						err := g.downloadChunk(dest, metaFile[i * sha256.Size: (i + 1) * sha256.Size], i)
+						if err != nil {
+							fmt.Printf("Could not download chunk %d : " + err.Error() + "\n", i)
+						} else {
+							downloadedChunks = append(downloadedChunks, uint64(i))
+						}
 					}
-				} else if gossipPacket.UploadedFileRequest != nil {
+					ack := common.FileUploadAck{ Origin:g.name, Destination:dest, UploadedChunks:downloadedChunks, MetaHash:metaHash }
+					ack.Sign(g.keychain.AsymmetricPrivKey, message.Nonce, [][]byte{})
+					hop, exist := g.routingTable.getNextHop(dest)
+					if exist {
+						if err := common.SendMessage(hop, common.GossipPacket{ FileUploadAck:&ack }, g.gossipConn); err != nil {
+							fmt.Println("Could not ack FileUploadMessage : " + err.Error())
+						}
+					}
+					if len(downloadedChunks) < len(metaFile) / sha256.Size {
+						message.HopLimit = message.HopLimit - 1
+						if message.HopLimit < 1 {
+							return
+						}
+						for _, chunk := range downloadedChunks {
+							message.UploadedChunks = append(message.UploadedChunks, chunk)
+						}
+						peer, exist := g.peers.PickN(1, []string { addr.String() })
+						if exist {
+							if err := common.SendMessage(peer[0], common.GossipPacket{ FileUploadAck:&ack }, g.gossipConn); err != nil {
+								fmt.Println("Could not forward FileUploadMessage : " + err.Error())
+							}
+						}
+					}
+				} else if request := gossipPacket.UploadedFileRequest; request != nil {
 					// Check if we have stored this file and send a list of  all the chunks we own, if we have some.
-					nonce, dest, metaHash := gossipPacket.UploadedFileRequest.Nonce, gossipPacket.UploadedFileRequest.Origin, gossipPacket.UploadedFileRequest.MetaHash
+					nonce, dest, metaHash := request.Nonce, request.Origin, request.MetaHash
 					metaHashStr := hex.EncodeToString(metaHash[:])
 					localFile, err := g.data.getLocalRecord(metaHashStr)
 					if err != nil {
@@ -435,27 +465,34 @@ func (g *Gossiper) StartGossiper() {
 					reply.Sign(g.keychain.AsymmetricPrivKey, nonce)
 					hop, exist := g.routingTable.getNextHop(dest)
 					if exist {
-						if err := common.SendMessage(hop, gossipPacket, g.gossipConn); err != nil {
-							fmt.Println("Could not reply to UploadFileRequest : " + err.Error())
+						if err := common.SendMessage(hop, common.GossipPacket{ UploadedFileReply:&reply }, g.gossipConn); err != nil {
+							fmt.Println("Could not reply to UploadedFileRequest : " + err.Error())
 						}
 					}
 					channel := make(chan *common.UploadedFileReply)
 					g.waitCloudRequest.Store(metaHashStr, channel)
 					go func() {
-						select {
-						case reply := <- channel:
-							if reply.VerifySignature(nil, nonce) {
-								//TODO HANDLE FILENAMES
-								g.data.addChunkLocation(metaHashStr, "", reply.OwnedChunks, localFile.ChunkCount, reply.Origin)
-								if g.data.remoteFileIsMatch(metaHashStr) {
-									g.downloadFile("", metaHash[:], "")
+						for {
+							select {
+							case reply := <- channel:
+								if reply.VerifySignature(nil, nonce) {
+									continue
+									}
+									//TODO HANDLE FILENAMES
+									g.data.addChunkLocation(metaHashStr, "", reply.OwnedChunks, localFile.ChunkCount, reply.Origin)
+									if g.data.remoteFileIsMatch(metaHashStr) {
+										err = g.downloadFile("", metaHash[:], "")
+										if err != nil {
+											fmt.Println("Could not download file from " + dest)
+										}
+										return
+									}
 								}
 							}
-						}
 					}()
-				} else if gossipPacket.UploadedFileReply != nil {
+				} else if reply := gossipPacket.UploadedFileReply; reply != nil {
 					//Check when we can reconstruct the file and trigger download when we all chunks somewhere
-					_, dest := gossipPacket.UploadedFileReply.Origin, gossipPacket.UploadedFileReply.Destination
+					_, dest := reply.Origin, reply.Destination
 					//publicKey := origin == nil
 					if dest != g.name {
 						if err := g.forwardPacket(gossipPacket); err != nil {
@@ -463,11 +500,11 @@ func (g *Gossiper) StartGossiper() {
 						}
 						return
 					}
-					channel, exist := g.waitCloudRequest.Load(hex.EncodeToString(gossipPacket.UploadedFileReply.MetaHash[:]))
+					channel, exist := g.waitCloudRequest.Load(hex.EncodeToString(reply.MetaHash[:]))
 					if !exist {
 						return
 					}
-					channel.(chan *common.UploadedFileReply) <- gossipPacket.UploadedFileReply
+					channel.(chan *common.UploadedFileReply) <- reply
 				}
 			}()
 		}
@@ -661,6 +698,59 @@ func (g *Gossiper) sendPrivateMessage(destination, text string) error {
 			return err
 		}
 	}
+
+	return nil
+}
+
+func (g *Gossiper) downloadChunk(dest string, hash []byte, i int) error {
+	hashStr := hex.EncodeToString(hash)
+
+	go func() {
+		packet := common.GossipPacket{
+			DataRequest: &common.DataRequest{
+				Origin:    g.name,
+				HopLimit:  DefaultHopLimit,
+				HashValue: hash,
+			},
+		}
+
+		replyChan := make(chan *common.DataReply)
+		g.waitData.Store(hashStr, &replyChan)
+		fmt.Printf("DOWNLOADING chunk %d from %s\n", i, dest)
+		// retry every period to get the meta file
+		for try := 0; try < MaxChunkDownloadRetryLimit; try++ {
+			packet.DataRequest.Destination = dest
+			nextHop, exist := g.routingTable.getNextHop(dest)
+			if !exist {
+				fmt.Println("Cannot send dataRequest to ", dest)
+			}
+			err := common.SendMessage(nextHop, &packet, g.gossipConn)
+			if err != nil {
+				fmt.Println(err.Error())
+				return
+			}
+
+			timer := time.NewTimer(DataReplyTimeOut)
+			select {
+			case reply := <-replyChan:
+				data := make([]byte, len(reply.Data))
+				copy(data, reply.Data)
+				g.waitData.Delete(hashStr)
+				if hex.EncodeToString(reply.HashValue) != hashStr {
+					fmt.Println(errors.New("cannot download chunk : hash doesn't match with reply"))
+					return
+				}
+				err = g.data.addLocalData(data, reply.HashValue)
+				if err != nil {
+					fmt.Println(errors.New("cannot download chunk: " + err.Error()))
+				}
+
+				fmt.Printf("DOWNLOADED chunk %d from %s\n", i, dest)
+				return
+			case <-timer.C:
+			}
+		}
+	}()
 
 	return nil
 }

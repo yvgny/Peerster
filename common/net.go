@@ -166,6 +166,7 @@ func CreateNewIdendityPKeyMapping(identity string, key *rsa.PrivateKey) *Identit
 }
 
 type FileUploadMessage struct {
+	Origin         string
 	MetaHash       [32]byte
 	MetaFile       []byte
 	HopLimit       uint64
