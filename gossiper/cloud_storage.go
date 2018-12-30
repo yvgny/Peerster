@@ -148,33 +148,29 @@ func (g *Gossiper) DownloadFileFromCloud(filename string) error {
 
 	channel := make(chan *common.UploadedFileReply)
 	g.waitCloudRequest.Store(fileInfo, channel)
-	go func() {
-		for {
-			timer := time.NewTimer(common.CloudSearchTimeout)
-			select {
-			case reply := <-channel:
-				//TODO : get public key, to verify signature
-				if reply.VerifySignature(nil, nonce) {
-					continue
-				}
-				g.data.addChunkLocation(fileInfo.MetaHash, filename, reply.OwnedChunks, fileInfo.ChunkCount, reply.Origin)
-				if g.data.remoteFileIsMatch(fileInfo.MetaHash) {
-					err = g.downloadFile("", metaHash[:], filename, &g.keychain.SymmetricKey)
-					if err != nil {
-						fmt.Println("Could not download file : " + err.Error())
-					}
-					_ = g.data.removeLocalFile(fileInfo.MetaHash)
-					g.waitCloudRequest.Delete(fileInfo)
-					return
-				}
-			case <-timer.C:
-				fmt.Println("Could not download file: peer replies timeout")
-				g.waitCloudRequest.Delete(fileInfo)
+	for {
+		timer := time.NewTimer(common.CloudSearchTimeout)
+		select {
+		case reply := <-channel:
+			//TODO : get public key, to verify signature
+			if reply.VerifySignature(nil, nonce) {
+				continue
 			}
+			g.data.addChunkLocation(fileInfo.MetaHash, filename, reply.OwnedChunks, fileInfo.ChunkCount, reply.Origin)
+			if g.data.remoteFileIsMatch(fileInfo.MetaHash) {
+				err = g.downloadFile("", metaHash[:], filename, &g.keychain.SymmetricKey)
+				if err != nil {
+					return errors.New("could not download file: " + err.Error())
+				}
+				_ = g.data.removeLocalFile(fileInfo.MetaHash)
+				g.waitCloudRequest.Delete(fileInfo)
+				return nil
+			}
+		case <-timer.C:
+			g.waitCloudRequest.Delete(fileInfo)
+			return errors.New("could not download file: peer replies timeout")
 		}
-	}()
-
-	return nil
+	}
 }
 
 func (g *Gossiper) UploadFileToCloud(filename string) (*LocalFile, error) {
@@ -218,36 +214,32 @@ func (g *Gossiper) UploadFileToCloud(filename string) (*LocalFile, error) {
 	channel := make(chan *common.FileUploadAck)
 	g.waitCloudStorage.Store(metaHashStr, channel)
 	foundFullMatch := false
-	go func() {
-		//TODO : Determine termination condition
-		timer := time.NewTicker(time.Second * 10)
-		for {
-			select {
-			case ack := <-channel:
-				//TODO : get public key, to verify signature
-				chunksHash, err := g.data.HashChunksOfLocalFile(metaHashSlice, ack.UploadedChunks, sha256.New())
-				if err != nil {
-					continue
-				}
-				if !ack.VerifySignature(nil, nonce, chunksHash) {
-					continue
-				}
-				g.data.addChunkLocation(metaHashStr, filename, ack.UploadedChunks, localFile.ChunkCount, ack.Origin)
-				if g.data.remoteFileIsMatch(metaHashStr) {
-					foundFullMatch = true
-				}
-			case <-timer.C:
-				g.waitCloudStorage.Delete(metaHashStr)
-				close(channel)
-				if !foundFullMatch {
-					fmt.Println("The file could not be entirely uploaded among other peers, try again.")
-				}
-				return
+	//TODO : Determine termination condition
+	timer := time.NewTicker(time.Second * 10)
+	for {
+		select {
+		case ack := <-channel:
+			//TODO : get public key, to verify signature
+			chunksHash, err := g.data.HashChunksOfLocalFile(metaHashSlice, ack.UploadedChunks, sha256.New())
+			if err != nil {
+				continue
 			}
+			if !ack.VerifySignature(nil, nonce, chunksHash) {
+				continue
+			}
+			g.data.addChunkLocation(metaHashStr, filename, ack.UploadedChunks, localFile.ChunkCount, ack.Origin)
+			if g.data.remoteFileIsMatch(metaHashStr) {
+				foundFullMatch = true
+			}
+		case <-timer.C:
+			g.waitCloudStorage.Delete(metaHashStr)
+			close(channel)
+			if !foundFullMatch {
+				return nil, errors.New("the file could not be entirely uploaded among other peers, try again")
+			}
+			return fileInfo, nil
 		}
-	}()
-
-	return fileInfo, nil
+	}
 }
 
 func (g *Gossiper) HandleClientCloudRequest(filename string) error {
