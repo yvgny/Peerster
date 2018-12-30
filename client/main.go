@@ -15,6 +15,7 @@ func main() {
 	msgArg := flag.String("msg", "", "message to be sent")
 	destArg := flag.String("dest", "", "destination for the private message")
 	fileArg := flag.String("file", "", "file to be indexed by the gossiper, or filename of the requested file")
+	cloudArg := flag.Bool("cloud", false, "specify if the file should be uploaded/downloaded to the cloud")
 	requestArg := flag.String("request", "", "request a chunk or metafile of this hash")
 	keywordsArg := flag.String("keywords", "", "search a file by keywords")
 	budgetArg := flag.Int("budget", 0, "budget allowed for the expanding-ring search.")
@@ -22,11 +23,12 @@ func main() {
 
 	packet := &common.ClientPacket{}
 
-	privateMsg := *msgArg != "" && *destArg != "" && *fileArg == "" && *requestArg == "" && *keywordsArg == ""
-	fileUpload := *msgArg == "" && *destArg == "" && *fileArg != "" && *requestArg == "" && *keywordsArg == ""
-	rumorMsg := *msgArg != "" && *destArg == "" && *fileArg == "" && *requestArg == "" && *keywordsArg == ""
-	fileRequestMsg := *msgArg == "" && *fileArg != "" && *requestArg != "" && *keywordsArg == ""
-	fileSearch := *msgArg == "" && *destArg == "" && *fileArg == "" && *requestArg == "" && *keywordsArg != ""
+	privateMsg := *msgArg != "" && *destArg != "" && *fileArg == "" && *requestArg == "" && *keywordsArg == "" && !*cloudArg
+	fileUpload := *msgArg == "" && *destArg == "" && *fileArg != "" && *requestArg == "" && *keywordsArg == "" && !*cloudArg
+	cloudUpload := *msgArg == "" && *destArg == "" && *fileArg != "" && *requestArg == "" && *keywordsArg == "" && *cloudArg
+	rumorMsg := *msgArg != "" && *destArg == "" && *fileArg == "" && *requestArg == "" && *keywordsArg == "" && !*cloudArg
+	fileRequestMsg := *msgArg == "" && *fileArg != "" && *requestArg != "" && *keywordsArg == "" && !*cloudArg
+	fileSearch := *msgArg == "" && *destArg == "" && *fileArg == "" && *requestArg == "" && *keywordsArg != "" && !*cloudArg
 
 	if privateMsg {
 		packet.Private = &common.PrivateMessage{
@@ -69,6 +71,10 @@ func main() {
 			Keywords: keywords,
 		}
 		packet.SearchRequest = &searchRequest
+	} else if cloudUpload {
+		packet.CloudPacket = &common.CloudPacket{
+			Filename: *fileArg,
+		}
 	} else {
 		fmt.Println("Error: combination of given arguments doesn't corresponds to any action")
 		os.Exit(1)
