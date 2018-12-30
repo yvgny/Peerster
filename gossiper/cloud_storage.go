@@ -136,7 +136,13 @@ func (g *Gossiper) DownloadFileFromCloud(filename string) error {
 		return err
 	}
 
-	request := common.GossipPacket{ UploadedFileRequest:&common.UploadedFileRequest{ Origin:g.name, Nonce:nonce, MetaHash:metaHash }}
+	request := common.GossipPacket{
+		UploadedFileRequest: &common.UploadedFileRequest{
+			Origin:   g.name,
+			Nonce:    nonce,
+			MetaHash: metaHash,
+		},
+	}
 	common.BroadcastMessage(g.peers.Elements(), request, nil, g.gossipConn)
 
 	channel := make(chan *common.UploadedFileReply)
@@ -145,7 +151,7 @@ func (g *Gossiper) DownloadFileFromCloud(filename string) error {
 		for {
 			timer := time.NewTimer(common.CloudSearchTimeout)
 			select {
-			case reply := <- channel:
+			case reply := <-channel:
 				//TODO : get public key, to verify signature
 				if reply.VerifySignature(nil, nonce) {
 					continue
@@ -187,9 +193,17 @@ func (g *Gossiper) UploadFileToCloud(filename string) (string, error) {
 
 	nonce := generateNonce()
 
-	message := common.FileUploadMessage{ Origin:g.name, UploadedChunks:[]uint64{}, Nonce:nonce, MetaHash:metaHash,
-		MetaFile: metaFile, HopLimit:common.BlockBroadcastHopLimit }
-	gossipPacket := common.GossipPacket{ FileUploadMessage:&message }
+	message := common.FileUploadMessage{
+		Origin:         g.name,
+		UploadedChunks: []uint64{},
+		Nonce:          nonce,
+		MetaHash:       metaHash,
+		MetaFile:       metaFile,
+		HopLimit:       common.BlockBroadcastHopLimit,
+	}
+	gossipPacket := common.GossipPacket{
+		FileUploadMessage: &message,
+	}
 	relayAddr := g.gossipAddress.String()
 	common.BroadcastMessage(g.peers.Elements(), gossipPacket, &relayAddr, g.gossipConn)
 
@@ -205,16 +219,16 @@ func (g *Gossiper) UploadFileToCloud(filename string) (string, error) {
 		timer := time.NewTicker(time.Second * 10)
 		for {
 			select {
-			case ack := <- channel:
+			case ack := <-channel:
 				//TODO : get public key, to verify signature, also get chunks
-				if ack.VerifySignature(nil, nonce, [][]byte {}) {
+				if ack.VerifySignature(nil, nonce, [][]byte{}) {
 					continue
 				}
 				g.data.addChunkLocation(metaHashStr, filename, ack.UploadedChunks, localFile.ChunkCount, ack.Origin)
 				if g.data.remoteFileIsMatch(metaHashStr) {
 					foundFullMatch = true
 				}
-			case <- timer.C:
+			case <-timer.C:
 				g.waitCloudStorage.Delete(metaHashStr)
 				close(channel)
 				if !foundFullMatch {
