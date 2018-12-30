@@ -198,12 +198,15 @@ func (g *Gossiper) StartGossiper() {
 						fmt.Println(err.Error())
 					}
 				} else if clientPacket.FileIndex != nil {
-					hash, err := g.data.addLocalFile(filepath.Join(common.SharedFilesFolder, clientPacket.FileIndex.Filename), nil)
+					file, err := g.data.addLocalFile(filepath.Join(common.SharedFilesFolder, clientPacket.FileIndex.Filename), nil)
 					if err != nil {
 						fmt.Println(err.Error())
 					}
-					file, _ := g.data.getLocalRecord(hex.EncodeToString(hash))
-					hashSlice, _ := hex.DecodeString(file.MetaHash)
+					hashSlice, err := hex.DecodeString(file.MetaHash)
+					if err != nil {
+						fmt.Println("Cannot publish transaction: " + err.Error())
+						return
+					}
 					tx := common.TxPublish{
 						File: &common.File{
 							Size:         file.Size,
@@ -212,8 +215,8 @@ func (g *Gossiper) StartGossiper() {
 						},
 					}
 					if valid := g.blockchain.HandleTx(tx); valid {
-						_ = g.PublishTransaction(file.Name, file.Size, hash)
-						fmt.Printf("Added new file from %s with hash %s\n", clientPacket.FileIndex.Filename, hex.EncodeToString(hash))
+						_ = g.PublishTransaction(file.Name, file.Size, hashSlice)
+						fmt.Printf("Added new file from %s with hash %s\n", clientPacket.FileIndex.Filename, file.MetaHash)
 					} else {
 						fmt.Println("Cannot index file: name already exists in blockchain")
 					}

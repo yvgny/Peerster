@@ -149,7 +149,7 @@ func (dm *DataManager) removeLocalFile(metafileHash string) error {
 
 // Index a new file and returns the hash of its meta file. If a key is given, the chunks are encrypted
 // with symmetric encryption. Otherwise a nil value can be given and chunks a stored in plaintext
-func (dm *DataManager) addLocalFile(path string, key *[32]byte) ([]byte, error) {
+func (dm *DataManager) addLocalFile(path string, key *[32]byte) (*LocalFile, error) {
 	file, err := os.Open(path)
 	if err != nil {
 		return nil, err
@@ -203,9 +203,9 @@ func (dm *DataManager) addLocalFile(path string, key *[32]byte) ([]byte, error) 
 	}
 
 	stats, _ := file.Stat()
-	dm.addLocalRecord(filename, stats.Name(), chunkMap, chunkCount, stats.Size())
+	lf := dm.addLocalRecord(filename, stats.Name(), chunkMap, chunkCount, stats.Size())
 
-	return metafileHash[:], nil
+	return lf, nil
 }
 
 func (dm *DataManager) addLocalData(data, hash []byte) error {
@@ -225,7 +225,7 @@ func (dm *DataManager) addLocalData(data, hash []byte) error {
 	return nil
 }
 
-func (dm *DataManager) addLocalRecord(hash, filename string, chunckMap []uint64, chunkCount uint64, size int64) {
+func (dm *DataManager) addLocalRecord(hash, filename string, chunckMap []uint64, chunkCount uint64, size int64) *LocalFile {
 	md := LocalFile{
 		Name:       filename,
 		ChunkMap:   chunckMap,
@@ -234,6 +234,8 @@ func (dm *DataManager) addLocalRecord(hash, filename string, chunckMap []uint64,
 	}
 
 	dm.localFiles.Store(hash, md)
+
+	return &md
 }
 
 func (dm *DataManager) getLocalRecord(hash string) (*LocalFile, error) {

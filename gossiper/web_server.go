@@ -253,12 +253,12 @@ func (g *Gossiper) postFileToIndexHandler(writer http.ResponseWriter, request *h
 	}
 	filename := request.Form.Get("Filename")
 
-	hash, err := g.data.addLocalFile(filepath.Join(common.SharedFilesFolder, filename), nil)
+	file, err := g.data.addLocalFile(filepath.Join(common.SharedFilesFolder, filename), nil)
 	if err != nil {
 		writeErrorToHTTP(writer, err)
 		fmt.Println(err.Error())
 	}
-	hexHash, _ := json.Marshal(hex.EncodeToString(hash))
+	hexHash, _ := json.Marshal(file.MetaHash)
 	_, err = writer.Write(hexHash)
 	if err != nil {
 		fmt.Println(err.Error())

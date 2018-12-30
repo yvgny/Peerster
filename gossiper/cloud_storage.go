@@ -180,12 +180,16 @@ func (g *Gossiper) DownloadFileFromCloud(filename string) error {
 
 func (g *Gossiper) UploadFileToCloud(filename string) (string, error) {
 	//TODO Choose right path for files to upload
-	metaHashSlice, err := g.data.addLocalFile(filepath.Join(common.CloudFilesUploadFolder, filename), &g.keychain.SymmetricKey)
+	fileInfo, err := g.data.addLocalFile(filepath.Join(common.CloudFilesUploadFolder, filename), &g.keychain.SymmetricKey)
 	if err != nil {
 		return "", err
 	}
-	metaHashStr := hex.EncodeToString(metaHashSlice)
+	metaHashStr := fileInfo.MetaHash
 	var metaHash [32]byte
+	metaHashSlice, err := hex.DecodeString(metaHashStr)
+	if err != nil {
+		return "", err
+	}
 	copy(metaHash[:], metaHashSlice)
 
 	metaFile, err := g.data.getLocalData(metaHashSlice)
