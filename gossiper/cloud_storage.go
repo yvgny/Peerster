@@ -21,12 +21,12 @@ var mappingsLoc = path.Join(DiskStorageLocation, "files.json")
 
 type CloudStorage struct {
 	sync.RWMutex
-	mappings map[string]string // Map (filename -> metahash),with metahash in hex
+	mappings map[string]LocalFile // Map (filename -> LocalFile)
 }
 
 func CreateNewCloudStorage() *CloudStorage {
 	return &CloudStorage{
-		mappings: make(map[string]string),
+		mappings: make(map[string]LocalFile),
 	}
 }
 
@@ -44,13 +44,13 @@ func LoadCloudStorageFromDisk() (*CloudStorage, error) {
 	if !ok {
 		return nil, errors.New("cannot load CloudStorage: malformed file")
 	}
-	cs := make(map[string]string)
+	cs := make(map[string]LocalFile)
 	for key, value := range csRaw {
-		hash, valid := value.(string)
+		file, valid := value.(LocalFile)
 		if !valid {
 			return nil, errors.New("cannot load CloudStorage: malformed file")
 		}
-		cs[key] = hash
+		cs[key] = file
 	}
 
 	return &CloudStorage{
@@ -58,10 +58,10 @@ func LoadCloudStorageFromDisk() (*CloudStorage, error) {
 	}, nil
 }
 
-func (cs *CloudStorage) GetAllMappings() map[string]string {
+func (cs *CloudStorage) GetAllMappings() map[string]LocalFile {
 	cs.RLock()
 	defer cs.RUnlock()
-	mapCopy := make(map[string]string)
+	mapCopy := make(map[string]LocalFile)
 	for key, value := range cs.mappings {
 		mapCopy[key] = value
 	}
@@ -69,11 +69,11 @@ func (cs *CloudStorage) GetAllMappings() map[string]string {
 	return mapCopy
 }
 
-func (cs *CloudStorage) GetHashOfFile(filename string) (string, bool) {
+func (cs *CloudStorage) GetInfoOfFile(filename string) (*LocalFile, bool) {
 	cs.RLock()
 	defer cs.RUnlock()
 	val, ok := cs.mappings[filename]
-	return val, ok
+	return &val, ok
 }
 
 func (cs *CloudStorage) Exists(filename string) bool {
@@ -83,11 +83,11 @@ func (cs *CloudStorage) Exists(filename string) bool {
 	return ok
 }
 
-func (cs *CloudStorage) AddMapping(filename, hash string) error {
+func (cs *CloudStorage) AddMapping(filename string, hash *LocalFile) error {
 	cs.Lock()
 	defer cs.Unlock()
 	oldValue, oldValueExists := cs.mappings[filename]
-	cs.mappings[filename] = hash
+	cs.mappings[filename] = *hash
 	err := cs.saveCloudStorageOnDiskWithoutLock()
 	if err != nil {
 		delete(cs.mappings, filename)
@@ -122,10 +122,10 @@ func (cs *CloudStorage) saveCloudStorageOnDiskWithoutLock() error {
 }
 
 func (g *Gossiper) DownloadFileFromCloud(filename string) error {
-	metaHashStr, _ := g.cloudStorage.GetHashOfFile(filename)
+	fileInfo, _ := g.cloudStorage.GetInfoOfFile(filename)
 
 	var metaHash [32]byte
-	metaHashSlice, err := hex.DecodeString(metaHashStr)
+	metaHashSlice, err := hex.DecodeString(fileInfo.MetaHash)
 	if err != nil {
 		return err
 	}
@@ -133,7 +133,6 @@ func (g *Gossiper) DownloadFileFromCloud(filename string) error {
 
 	nonce := generateNonce()
 
-	localFile, err := g.data.getLocalRecord(metaHashStr)
 	if err != nil {
 		return err
 	}
@@ -148,7 +147,7 @@ func (g *Gossiper) DownloadFileFromCloud(filename string) error {
 	common.BroadcastMessage(g.peers.Elements(), request, nil, g.gossipConn)
 
 	channel := make(chan *common.UploadedFileReply)
-	g.waitCloudRequest.Store(metaHashStr, channel)
+	g.waitCloudRequest.Store(fileInfo, channel)
 	go func() {
 		for {
 			timer := time.NewTimer(common.CloudSearchTimeout)
@@ -158,19 +157,19 @@ func (g *Gossiper) DownloadFileFromCloud(filename string) error {
 				if reply.VerifySignature(nil, nonce) {
 					continue
 				}
-				g.data.addChunkLocation(metaHashStr, filename, reply.OwnedChunks, localFile.ChunkCount, reply.Origin)
-				if g.data.remoteFileIsMatch(metaHashStr) {
+				g.data.addChunkLocation(fileInfo.MetaHash, filename, reply.OwnedChunks, fileInfo.ChunkCount, reply.Origin)
+				if g.data.remoteFileIsMatch(fileInfo.MetaHash) {
 					err = g.downloadFile("", metaHash[:], filename, &g.keychain.SymmetricKey)
 					if err != nil {
 						fmt.Println("Could not download file : " + err.Error())
 					}
-					_ = g.data.removeLocalFile(metaHashStr)
-					g.waitCloudRequest.Delete(metaHashStr)
+					_ = g.data.removeLocalFile(fileInfo.MetaHash)
+					g.waitCloudRequest.Delete(fileInfo)
 					return
 				}
 			case <-timer.C:
 				fmt.Println("Could not download file: peer replies timeout")
-				g.waitCloudRequest.Delete(metaHashStr)
+				g.waitCloudRequest.Delete(fileInfo)
 			}
 		}
 	}()
@@ -178,23 +177,23 @@ func (g *Gossiper) DownloadFileFromCloud(filename string) error {
 	return nil
 }
 
-func (g *Gossiper) UploadFileToCloud(filename string) (string, error) {
+func (g *Gossiper) UploadFileToCloud(filename string) (*LocalFile, error) {
 	//TODO Choose right path for files to upload
 	fileInfo, err := g.data.addLocalFile(filepath.Join(common.CloudFilesUploadFolder, filename), &g.keychain.SymmetricKey)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	metaHashStr := fileInfo.MetaHash
 	var metaHash [32]byte
 	metaHashSlice, err := hex.DecodeString(metaHashStr)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	copy(metaHash[:], metaHashSlice)
 
 	metaFile, err := g.data.getLocalData(metaHashSlice)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	nonce := generateNonce()
@@ -214,7 +213,7 @@ func (g *Gossiper) UploadFileToCloud(filename string) (string, error) {
 
 	localFile, err := g.data.getLocalRecord(metaHashStr)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	channel := make(chan *common.FileUploadAck)
 	g.waitCloudStorage.Store(metaHashStr, channel)
@@ -248,7 +247,7 @@ func (g *Gossiper) UploadFileToCloud(filename string) (string, error) {
 		}
 	}()
 
-	return metaHashStr, nil
+	return fileInfo, nil
 }
 
 func (g *Gossiper) HandleClientCloudRequest(filename string) error {
