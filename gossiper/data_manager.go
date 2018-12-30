@@ -121,6 +121,31 @@ func (dm *DataManager) remoteFileIsMatch(metafileHash string) bool {
 	return remoteFile.ChunkCount == uint64(len(remoteFile.ChunkLocations))
 }
 
+func (dm *DataManager) removeLocalFile(metafileHash string) error {
+	hash, err := hex.DecodeString(metafileHash)
+	if err != nil {
+		return err
+	}
+	metafile, err := dm.getLocalData(hash)
+	if err != nil {
+		return err
+	}
+
+	if len(metafile) % sha256.Size != 0 {
+		return errors.New("cannot remove local file: invalid metafile length")
+	}
+
+	for i := 0; i < len(metafile); i += sha256.Size {
+		metahash := metafile[i : i+sha256.Size]
+		chunkHex := hex.EncodeToString(metahash)
+		dm.localFiles.Delete(chunkHex)
+	}
+
+	dm.localFiles.Delete(metafileHash)
+
+	return nil
+}
+
 // Index a new file and returns the hash of its meta file
 func (dm *DataManager) addLocalFile(path string) ([]byte, error) {
 	file, err := os.Open(path)
