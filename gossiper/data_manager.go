@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/yvgny/Peerster/common"
+	"hash"
 	"io"
 	"io/ioutil"
 	"math/rand"
@@ -253,6 +254,23 @@ func (dm *DataManager) getLocalData(hash []byte) ([]byte, error) {
 	}
 
 	return rawData, nil
+}
+
+func (dm *DataManager) HashChunksOfLocalFile(metafileHash []byte, chunkMap []uint64, hashWriter hash.Hash) ([]byte, error) {
+	metafile, err := dm.getLocalData(metafileHash)
+	if err != nil {
+		return nil, err
+	}
+	for _, chunkNum := range chunkMap {
+		currHash := metafile[(chunkNum-1)*sha256.Size : chunkNum*sha256.Size]
+		data, err := dm.getLocalData(currHash)
+		if err != nil {
+			return nil, err
+		}
+		hashWriter.Write(data)
+	}
+
+	return hashWriter.Sum(nil), nil
 }
 
 func (dm *DataManager) SearchLocalFile(keywords []string) []*common.SearchResult {

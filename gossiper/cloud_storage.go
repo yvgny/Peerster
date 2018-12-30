@@ -1,6 +1,7 @@
 package gossiper
 
 import (
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -204,8 +205,7 @@ func (g *Gossiper) UploadFileToCloud(filename string) (string, error) {
 	gossipPacket := common.GossipPacket{
 		FileUploadMessage: &message,
 	}
-	relayAddr := g.gossipAddress.String()
-	common.BroadcastMessage(g.peers.Elements(), gossipPacket, &relayAddr, g.gossipConn)
+	common.BroadcastMessage(g.peers.Elements(), gossipPacket, nil, g.gossipConn)
 
 	localFile, err := g.data.getLocalRecord(metaHashStr)
 	if err != nil {
@@ -220,8 +220,12 @@ func (g *Gossiper) UploadFileToCloud(filename string) (string, error) {
 		for {
 			select {
 			case ack := <-channel:
-				//TODO : get public key, to verify signature, also get chunks
-				if ack.VerifySignature(nil, nonce, [][]byte{}) {
+				//TODO : get public key, to verify signature
+				chunksHash, err := g.data.HashChunksOfLocalFile(metaHashSlice, ack.UploadedChunks, sha256.New())
+				if err != nil {
+					continue
+				}
+				if !ack.VerifySignature(nil, nonce, chunksHash) {
 					continue
 				}
 				g.data.addChunkLocation(metaHashStr, filename, ack.UploadedChunks, localFile.ChunkCount, ack.Origin)

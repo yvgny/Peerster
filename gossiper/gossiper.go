@@ -461,7 +461,7 @@ func (g *Gossiper) StartGossiper() {
 						}
 						err := g.downloadChunk(dest, metaFile[i * sha256.Size: (i + 1) * sha256.Size], i)
 						if err != nil {
-							fmt.Printf("Could not download chunk %d : " + err.Error() + "\n", i)
+							fmt.Printf("Could not download chunk %d : %s\n", i, err.Error())
 						} else {
 							downloadedChunks = append(downloadedChunks, uint64(i))
 						}
@@ -472,8 +472,12 @@ func (g *Gossiper) StartGossiper() {
 						UploadedChunks:downloadedChunks,
 						MetaHash:metaHash,
 					}
-					//TODO Get the array of chunks
-					ack.Sign(g.keychain.AsymmetricPrivKey, message.Nonce, [][]byte{})
+					chunksHash, err := g.data.HashChunksOfLocalFile(metaFile, downloadedChunks, sha256.New())
+					if err != nil {
+						fmt.Printf("Could not hash chunks: %s\n", err.Error())
+						return
+					}
+					ack.Sign(g.keychain.AsymmetricPrivKey, message.Nonce, chunksHash)
 					hop, exist := g.routingTable.getNextHop(dest)
 					if exist {
 						if err := common.SendMessage(hop, common.GossipPacket{ FileUploadAck:&ack }, g.gossipConn); err != nil {

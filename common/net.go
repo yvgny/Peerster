@@ -266,19 +266,13 @@ func (ufr *UploadedFileReply) Hash(nonce [32]byte) (out [32]byte) {
 	return
 }
 
-// The nonce from FileUploadMessage should be given. The array of chunks is the
-// chunks selected in UploadedChunks
-func (fua *FileUploadAck) Hash(chunks [][]byte, nonce [32]byte) (out [32]byte) {
-	if len(chunks) != len(fua.UploadedChunks) {
-		return
-	}
+// The nonce from FileUploadMessage should be given. chunksHash is the
+// hash of the concatenation of the chunks selected in UploadedChunks
+func (fua *FileUploadAck) Hash(chunksHash []byte, nonce [32]byte) (out [32]byte) {
 	h := sha256.New()
 	h.Write([]byte(fua.Origin))
 	h.Write([]byte(fua.Destination))
-	for index, chunk := range chunks {
-		_ = binary.Write(h, binary.LittleEndian, fua.UploadedChunks[index])
-		h.Write(chunk)
-	}
+	h.Write(chunksHash)
 	h.Write(nonce[:])
 	copy(out[:], h.Sum(nil))
 	return
