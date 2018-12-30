@@ -448,29 +448,31 @@ func (g *Gossiper) StartGossiper() {
 					}
 				} else if message := gossipPacket.FileUploadMessage; message != nil {
 					metaHash, metaFile, dest := message.MetaHash, message.MetaFile, message.Origin
-					err := g.data.addLocalData(metaFile, metaHash[:])
+					err = g.data.addLocalData(metaFile, metaHash[:])
 					if err != nil {
 						fmt.Println("Could not add local data : " + err.Error())
+						return
 					}
 					downloadedChunks := make([]uint64, 0)
-					for i := 0 ; i < len(message.MetaFile) / sha256.Size ; i++ {
+					for i := 0; i < len(message.MetaFile)/sha256.Size; i++ {
 						for _, chunk := range message.UploadedChunks {
 							if chunk == uint64(i) {
 								continue
 							}
 						}
-						err := g.downloadChunk(dest, metaFile[i * sha256.Size: (i + 1) * sha256.Size], i)
+						err := g.downloadChunk(dest, metaFile[i*sha256.Size:(i+1)*sha256.Size], i)
 						if err != nil {
 							fmt.Printf("Could not download chunk %d : %s\n", i, err.Error())
+							return
 						} else {
 							downloadedChunks = append(downloadedChunks, uint64(i))
 						}
 					}
 					ack := common.FileUploadAck{
-						Origin:g.name,
-						Destination:dest,
-						UploadedChunks:downloadedChunks,
-						MetaHash:metaHash,
+						Origin:         g.name,
+						Destination:    dest,
+						UploadedChunks: downloadedChunks,
+						MetaHash:       metaHash,
 					}
 					chunksHash, err := g.data.HashChunksOfLocalFile(metaFile, downloadedChunks, sha256.New())
 					if err != nil {
@@ -480,11 +482,12 @@ func (g *Gossiper) StartGossiper() {
 					ack.Sign(g.keychain.AsymmetricPrivKey, message.Nonce, chunksHash)
 					hop, exist := g.routingTable.getNextHop(dest)
 					if exist {
-						if err := common.SendMessage(hop, common.GossipPacket{ FileUploadAck:&ack }, g.gossipConn); err != nil {
+						if err := common.SendMessage(hop, common.GossipPacket{FileUploadAck: &ack}, g.gossipConn); err != nil {
 							fmt.Println("Could not ack FileUploadMessage : " + err.Error())
+							return
 						}
 					}
-					if len(downloadedChunks) + len(message.UploadedChunks) < len(metaFile) / sha256.Size {
+					if len(downloadedChunks)+len(message.UploadedChunks) < len(metaFile)/sha256.Size {
 						message.HopLimit = message.HopLimit - 1
 						if message.HopLimit < 1 {
 							return
@@ -492,10 +495,11 @@ func (g *Gossiper) StartGossiper() {
 						for _, chunk := range downloadedChunks {
 							message.UploadedChunks = append(message.UploadedChunks, chunk)
 						}
-						peer, exist := g.peers.PickN(1, []string { addr.String() })
+						peer, exist := g.peers.PickN(1, []string{addr.String()})
 						if exist {
-							if err := common.SendMessage(peer[0], common.GossipPacket{ FileUploadAck:&ack }, g.gossipConn); err != nil {
+							if err := common.SendMessage(peer[0], common.GossipPacket{FileUploadAck: &ack}, g.gossipConn); err != nil {
 								fmt.Println("Could not forward FileUploadMessage : " + err.Error())
+								return
 							}
 						}
 					}
@@ -517,13 +521,13 @@ func (g *Gossiper) StartGossiper() {
 					reply.Sign(g.keychain.AsymmetricPrivKey, nonce)
 					hop, exist := g.routingTable.getNextHop(dest)
 					if exist {
-						if err := common.SendMessage(hop, common.GossipPacket{ UploadedFileReply:&reply }, g.gossipConn); err != nil {
+						if err := common.SendMessage(hop, common.GossipPacket{UploadedFileReply: &reply}, g.gossipConn); err != nil {
 							fmt.Println("Could not reply to UploadedFileRequest : " + err.Error())
 						}
 					}
 				} else if reply := gossipPacket.UploadedFileReply; reply != nil {
 					//Check when we can reconstruct the file and trigger download when we all chunks somewhere
-					_, dest := reply.Origin, reply.Destination
+					dest := reply.Destination
 					if dest != g.name {
 						if err := g.forwardPacket(gossipPacket); err != nil {
 							fmt.Println("Could not forward UploadedFileReply : " + err.Error())
