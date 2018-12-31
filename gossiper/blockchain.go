@@ -22,6 +22,8 @@ type Blockchain struct {
 	currentHeight         uint64
 	mappings              sync.Map
 	changesNotifier       chan Notification
+	pubKeyMapping         sync.Map
+	claimedPubkey		  common.ConcurrentSet
 }
 
 type Notification struct{}
@@ -93,7 +95,13 @@ func (bc *Blockchain) handleTxWithoutLock(tx common.TxPublish) bool {
 		}
 	}
 
-	_, alreadyClaimed := bc.mappings.Load(tx.File.Name)
+	alreadyClaimed := false
+	if tx.File != nil {
+		_, alreadyClaimed = bc.mappings.Load(tx.File.Name)
+	}
+	if tx.Mapping != nil {
+		alreadyClaimed = alreadyClaimed || bc.claimedPubkey.Exists(hex.EncodeToString(tx.Mapping.PublicKey))
+	}
 
 	if alreadyClaimed {
 		return false
