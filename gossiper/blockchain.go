@@ -141,7 +141,7 @@ func (bc *Blockchain) AddBlock(block common.Block, minedLocally bool) bool {
 			height++
 			for _, tx := range node.Transactions {
 				for _, newTx := range block.Transactions {
-					if tx.File.Name == newTx.File.Name {
+					if txClaimTheSame(newTx, tx) { // TODO: make sure it is needed
 						return
 					}
 				}
@@ -167,7 +167,12 @@ func (bc *Blockchain) AddBlock(block common.Block, minedLocally bool) bool {
 			if len(node.Transactions) > 0 {
 				txs := ""
 				for _, tx := range node.Transactions {
-					txs += fmt.Sprintf("%s%s", tx.File.Name, ",")
+					if tx.File != nil {
+						txs += fmt.Sprintf("%s,", tx.File.Name)
+					}
+					if tx.Mapping != nil {
+						txs += fmt.Sprintf("%s,", hex.EncodeToString(tx.Mapping.PublicKey))
+					}
 				}
 				txs = strings.TrimSuffix(txs, ",")
 				out += txs
@@ -192,6 +197,8 @@ func (bc *Blockchain) AddBlock(block common.Block, minedLocally bool) bool {
 		// swap to longest fork
 		//
 		bc.mappings = sync.Map{}
+		bc.claimedPubkey = common.ConcurrentSet{}
+		bc.pubKeyMapping = sync.Map{}
 		bc.storeNewBlock(block)
 		forEachBlockInFork(&block, func(node *common.Block) {
 			bc.addNewMappings(block.Transactions)
@@ -247,7 +254,14 @@ func (bc *Blockchain) AddBlock(block common.Block, minedLocally bool) bool {
 // Add new mappings. Should be called when a write lock on the Blockchain is taken !
 func (bc *Blockchain) addNewMappings(txs []common.TxPublish) {
 	for _, tx := range txs {
-		bc.mappings.Store(tx.File.Name, hex.EncodeToString(tx.File.MetafileHash))
+		if tx.File != nil {
+			bc.mappings.Store(tx.File.Name, hex.EncodeToString(tx.File.MetafileHash))
+		}
+		if tx.Mapping != nil {
+			encodedPubkey := hex.EncodeToString(tx.Mapping.PublicKey)
+			bc.claimedPubkey.Store(encodedPubkey)
+			bc.pubKeyMapping.Store(tx.Mapping.Identity, encodedPubkey)
+		}
 	}
 }
 
