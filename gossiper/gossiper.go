@@ -139,6 +139,16 @@ func NewGossiper(clientAddress, gossipAddress, name, peers string, simpleBroadca
 	}()
 	g.blockchain.startMining(newBlocks)
 
+	tx := common.TxPublish{
+		Mapping: common.CreateNewIdendityPKeyMapping(g.name, g.keychain.AsymmetricPrivKey),
+	}
+	clonedTx := tx.Clone()
+	if valid := g.blockchain.HandleTx(tx); valid {
+		_ = g.PublishTransaction(*clonedTx)
+		fmt.Println("Publish transaction containing identity/pubkey")
+	} else {
+		fmt.Println("Cannot publish transaction containing identity/pubkey")
+	}
 	return g, nil
 }
 
@@ -198,8 +208,9 @@ func (g *Gossiper) StartGossiper() {
 							MetafileHash: hashSlice,
 						},
 					}
+					clonedTx := tx.Clone()
 					if valid := g.blockchain.HandleTx(tx); valid {
-						_ = g.PublishTransaction(file.Name, file.Size, hash)
+						_ = g.PublishTransaction(*clonedTx)
 						fmt.Printf("Added new file from %s with hash %s\n", clientPacket.FileIndex.Filename, hex.EncodeToString(hash))
 					} else {
 						fmt.Println("Cannot index file: name already exists in blockchain")
