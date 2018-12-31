@@ -127,9 +127,13 @@ func (bc *Blockchain) AddBlock(block common.Block, minedLocally bool) bool {
 		return false
 	}
 
-	forEachBlockInFork := func(lastBlock *common.Block, f func(*common.Block)) {
+	// f should return true to continue the iteration. False will stop.
+	forEachBlockInFork := func(lastBlock *common.Block, f func(*common.Block) bool) {
 		for node, present := lastBlock, true; present; node, present = bc.getBlock(node.PrevHash) {
-			f(node)
+			shouldContinue := f(node)
+			if !shouldContinue {
+				return
+			}
 		}
 	}
 
@@ -137,16 +141,22 @@ func (bc *Blockchain) AddBlock(block common.Block, minedLocally bool) bool {
 	if !powIsCorrect(&block) {
 		return false
 	} else if prevBlockExists {
-		forEachBlockInFork(prevBlock, func(node *common.Block) {
+		alreadyClaimed := false
+		forEachBlockInFork(prevBlock, func(node *common.Block) bool {
 			height++
 			for _, tx := range node.Transactions {
 				for _, newTx := range block.Transactions {
-					if txClaimTheSame(newTx, tx) { // TODO: make sure it is needed
-						return
+					if txClaimTheSame(newTx, tx) {
+						alreadyClaimed = true
+						return false
 					}
 				}
 			}
+			return true
 		})
+		if alreadyClaimed {
+			return false
+		}
 	}
 
 	removeInvalidTransaction := func() {
@@ -159,7 +169,7 @@ func (bc *Blockchain) AddBlock(block common.Block, minedLocally bool) bool {
 
 	printChain := func(lastBlock *common.Block) {
 		out := "CHAIN"
-		forEachBlockInFork(lastBlock, func(node *common.Block) {
+		forEachBlockInFork(lastBlock, func(node *common.Block) bool {
 			out += " "
 			hash := node.Hash()
 			prevHash := node.PrevHash
@@ -177,6 +187,7 @@ func (bc *Blockchain) AddBlock(block common.Block, minedLocally bool) bool {
 				txs = strings.TrimSuffix(txs, ",")
 				out += txs
 			}
+			return true
 		})
 		fmt.Println(out)
 	}
@@ -200,8 +211,9 @@ func (bc *Blockchain) AddBlock(block common.Block, minedLocally bool) bool {
 		bc.claimedPubkey = common.ConcurrentSet{}
 		bc.pubKeyMapping = sync.Map{}
 		bc.storeNewBlock(block)
-		forEachBlockInFork(&block, func(node *common.Block) {
+		forEachBlockInFork(&block, func(node *common.Block) bool {
 			bc.addNewMappings(block.Transactions)
+			return true
 		})
 		bc.currentHeight = height
 
@@ -213,17 +225,16 @@ func (bc *Blockchain) AddBlock(block common.Block, minedLocally bool) bool {
 		blockHeight := make(map[[32]byte]int)
 		blockHeight[bc.longestChainLastBlock] = rewindedBlock
 		// save height each block in current fork
-		forEachBlockInFork(currentLastBlock, func(node *common.Block) {
+		forEachBlockInFork(currentLastBlock, func(node *common.Block) bool {
 			rewindedBlock++
 			blockHeight[node.PrevHash] = rewindedBlock
+			return true
 		})
 		// find the node where the fork happened
-		forEachBlockInFork(&block, func(node *common.Block) {
+		forEachBlockInFork(&block, func(node *common.Block) bool {
 			exists := false
 			rewindedBlock, exists = blockHeight[node.PrevHash]
-			if exists {
-				return
-			}
+			return !exists
 		})
 
 		// Switch chain
