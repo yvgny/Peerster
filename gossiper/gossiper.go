@@ -400,6 +400,7 @@ func (g *Gossiper) StartGossiper() {
 				} else if gossipPacket.TxPublish != nil {
 					clonedTx := gossipPacket.TxPublish.Clone()
 					valid := g.blockchain.HandleTx(*clonedTx)
+					gossipPacket.TxPublish = clonedTx
 					gossipPacket.TxPublish.HopLimit--
 					if valid && gossipPacket.TxPublish.HopLimit > 0 {
 						addrStr := addr.String()
