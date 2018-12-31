@@ -148,7 +148,7 @@ func (bc *Blockchain) AddBlock(block common.Block, minedLocally bool) bool {
 					}
 				}
 			}
-			return false
+			return true
 		})
 		if alreadyClaimed {
 			return false
@@ -178,7 +178,7 @@ func (bc *Blockchain) AddBlock(block common.Block, minedLocally bool) bool {
 				txs = strings.TrimSuffix(txs, ",")
 				out += txs
 			}
-			return false
+			return true
 		})
 		fmt.Println(out)
 	}
@@ -202,7 +202,7 @@ func (bc *Blockchain) AddBlock(block common.Block, minedLocally bool) bool {
 		bc.storeNewBlock(block)
 		forEachBlockInFork(&block, func(node *common.Block) bool {
 			bc.addNewMappings(block.Transactions)
-			return false
+			return true
 		})
 		bc.currentHeight = height
 
@@ -217,7 +217,7 @@ func (bc *Blockchain) AddBlock(block common.Block, minedLocally bool) bool {
 		forEachBlockInFork(currentLastBlock, func(node *common.Block) bool {
 			rewindedBlock++
 			blockHeight[node.PrevHash] = rewindedBlock
-			return false
+			return true
 		})
 		// find the node where the fork happened
 		forEachBlockInFork(&block, func(node *common.Block) bool {
