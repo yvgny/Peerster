@@ -51,17 +51,9 @@ func (bc *Blockchain) getBlock(hash [32]byte) (*common.Block, bool) {
 	return nil, present
 }
 
-func (g *Gossiper) PublishTransaction(name string, size int64, metafileHash []byte) error {
-	file := common.File{
-		Name:         name,
-		Size:         size,
-		MetafileHash: metafileHash,
-	}
-
-	tx := common.TxPublish{
-		File:     &file,
-		HopLimit: common.TxBroadcastHopLimit,
-	}
+// Make sure tx is a deep copy of the origin TxPublish when calling PublishTransaction
+func (g *Gossiper) PublishTransaction(tx common.TxPublish) error {
+	tx.HopLimit = common.TxBroadcastHopLimit
 
 	packet := common.GossipPacket{
 		TxPublish: &tx,
