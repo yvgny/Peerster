@@ -35,24 +35,11 @@ func LoadCloudStorageFromDisk() (*CloudStorage, error) {
 	if err != nil {
 		return nil, err
 	}
-	var csRaw0 interface{}
-	err = json.Unmarshal(bytes, &csRaw0)
+	var cs map[string]LocalFile
+	err = json.Unmarshal(bytes, &cs)
 	if err != nil {
 		return nil, errors.New("cannot load CloudStorage: malformed file")
 	}
-	csRaw, ok := csRaw0.(map[string]interface{})
-	if !ok {
-		return nil, errors.New("cannot load CloudStorage: malformed file")
-	}
-	cs := make(map[string]LocalFile)
-	for key, value := range csRaw {
-		file, valid := value.(LocalFile)
-		if !valid {
-			return nil, errors.New("cannot load CloudStorage: malformed file")
-		}
-		cs[key] = file
-	}
-
 	return &CloudStorage{
 		mappings: cs,
 	}, nil
