@@ -33,6 +33,7 @@ func NewBlockchain() *Blockchain {
 		pendingTransactions:   []common.TxPublish{},
 		longestChainLastBlock: GenesisBlockHash,
 		changesNotifier:       make(chan Notification, 1),
+		claimedPubkey:         *common.NewConcurrentSet(),
 	}
 }
 
@@ -208,7 +209,7 @@ func (bc *Blockchain) AddBlock(block common.Block, minedLocally bool) bool {
 		// swap to longest fork
 		//
 		bc.mappings = sync.Map{}
-		bc.claimedPubkey = common.ConcurrentSet{}
+		bc.claimedPubkey = *common.NewConcurrentSet()
 		bc.pubKeyMapping = sync.Map{}
 		bc.storeNewBlock(block)
 		forEachBlockInFork(&block, func(node *common.Block) bool {
