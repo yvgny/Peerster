@@ -232,6 +232,15 @@ func (id *IdentityPKeyMapping) Clone() *IdentityPKeyMapping {
 	return clone
 }
 
+func (b *Block) Clone() *Block {
+	clone := &Block{PrevHash: b.PrevHash, Nonce: b.Nonce}
+	clone.Transactions = make([]TxPublish, len(b.Transactions))
+	for index, tx := range b.Transactions {
+		clone.Transactions[index] = *tx.Clone()
+	}
+	return clone
+}
+
 func (t *TxPublish) Clone() *TxPublish {
 	clone := &TxPublish{HopLimit: t.HopLimit}
 	if t.File != nil {
