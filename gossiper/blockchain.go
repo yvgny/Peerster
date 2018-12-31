@@ -117,10 +117,8 @@ func (bc *Blockchain) handleTxWithoutLock(tx common.TxPublish) bool {
 func (bc *Blockchain) AddBlock(block common.Block, minedLocally bool) bool {
 	bc.Lock()
 	defer bc.Unlock()
-	block.Transactions = append([]common.TxPublish(nil), block.Transactions...)
-	for index, tx := range block.Transactions {
-		block.Transactions[index].File.MetafileHash = append([]byte(nil), tx.File.MetafileHash...)
-	}
+
+	block = *block.Clone()
 
 	height := uint64(1)
 	prevBlock, prevBlockExists := bc.getBlock(block.PrevHash)
