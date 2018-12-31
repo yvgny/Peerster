@@ -398,8 +398,8 @@ func (g *Gossiper) StartGossiper() {
 						}
 					}
 				} else if gossipPacket.TxPublish != nil {
-					gossipPacket.TxPublish.File.MetafileHash = append([]byte(nil), gossipPacket.TxPublish.File.MetafileHash...)
-					valid := g.blockchain.HandleTx(*gossipPacket.TxPublish)
+					clonedTx := gossipPacket.TxPublish.Clone()
+					valid := g.blockchain.HandleTx(*clonedTx)
 					gossipPacket.TxPublish.HopLimit--
 					if valid && gossipPacket.TxPublish.HopLimit > 0 {
 						addrStr := addr.String()
