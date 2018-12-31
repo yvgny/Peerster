@@ -300,7 +300,7 @@ func (bc *Blockchain) getTransactions() []common.TxPublish {
 	copied := make([]common.TxPublish, len(bc.pendingTransactions))
 	copy(copied, bc.pendingTransactions)
 	for index, tx := range copied {
-		copied[index].File.MetafileHash = append([]byte(nil), tx.File.MetafileHash...)
+		copied[index] = *tx.Clone()
 	}
 
 	return copied
