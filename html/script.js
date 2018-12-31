@@ -129,9 +129,26 @@ $(document).ready(function () {
         $.post(cloudFilesURL, {Filename: filename}, function () {
             $('#cloud-files-filename').text("Choose file");
             showModalAlert("Your file has been correctly uploaded to the Cloud !");
+            let $btn = $('#cloud-files-uploadButton');
+            $btn.html($btn.data('original-text'));
+            $btn.removeClass('disabled')
         }).fail(function (xhr) {
-            showModalAlert(xhr.responseText, true)
+            showModalAlert(xhr.responseText, true);
+            let $btn = $('#cloud-files-uploadButton');
+            $btn.html($btn.data('original-text'));
+            $btn.removeClass('disabled')
         })
+    });
+
+    // Change button when uploading
+    $('#cloud-files-uploadButton').on('click', function () {
+        let $this = $(this);
+        $this.addClass('disabled');
+        let loadingText = '<i class="fa fa-circle-o-notch fa-spin"></i> Uploading...';
+        if ($(this).html() !== loadingText) {
+            $this.data('original-text', $(this).html());
+            $this.html(loadingText);
+        }
     });
 
     // Update file name in file chooser box (File index)

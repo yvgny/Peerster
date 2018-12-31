@@ -149,8 +149,8 @@ func NewGossiper(clientAddress, gossipAddress, name, peers string, simpleBroadca
 			}
 		}
 	}()
-	// TODO put back
-	// g.blockchain.startMining(newBlocks)
+
+	g.blockchain.startMining(newBlocks)
 
 	return g, nil
 }
