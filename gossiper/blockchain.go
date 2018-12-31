@@ -1,6 +1,7 @@
 package gossiper
 
 import (
+	"bytes"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -79,10 +80,15 @@ func (bc *Blockchain) HandleTx(tx common.TxPublish) bool {
 	return bc.handleTxWithoutLock(tx)
 }
 
+func txClaimTheSame(txA common.TxPublish, txB common.TxPublish) bool {
+	return (txA.File != nil && txB.File != nil && txA.File.Name == txB.File.Name) ||
+		   (txA.Mapping != nil && txB.Mapping != nil && bytes.Equal(txA.Mapping.PublicKey, txB.Mapping.PublicKey))
+}
+
 // return true if transaction has been added (= valid + not seen for the moment)
 func (bc *Blockchain) handleTxWithoutLock(tx common.TxPublish) bool {
 	for _, pendingTx := range bc.pendingTransactions {
-		if tx.File.Name == pendingTx.File.Name {
+		if txClaimTheSame(tx, pendingTx) {
 			return false
 		}
 	}
