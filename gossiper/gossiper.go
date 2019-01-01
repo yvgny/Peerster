@@ -104,7 +104,7 @@ func NewGossiper(clientAddress, gossipAddress, name, peers string, simpleBroadca
 
 	ks, err := common.LoadKeyStorageFromDisk()
 	if err != nil {
-		ks, err = common.GenerateNewKeyStorage()
+		ks, err := common.GenerateNewKeyStorage()
 		if err != nil {
 			return nil, err
 		}
@@ -143,12 +143,18 @@ func NewGossiper(clientAddress, gossipAddress, name, peers string, simpleBroadca
 		Mapping: common.CreateNewIdendityPKeyMapping(g.name, g.keychain.AsymmetricPrivKey),
 	}
 	clonedTx := tx.Clone()
-	if valid := g.blockchain.HandleTx(tx); valid {
-		_ = g.PublishTransaction(*clonedTx)
-		fmt.Println("Publish transaction containing identity/pubkey")
-	} else {
-		fmt.Println("Cannot publish transaction containing identity/pubkey")
-	}
+	go func() {
+		rtimer := time.NewTicker(5 * time.Second)
+		select {
+		case <-rtimer.C:
+			if valid := g.blockchain.HandleTx(tx); valid {
+				_ = g.PublishTransaction(*clonedTx)
+				fmt.Println("Publish transaction containing identity/pubkey")
+			} else {
+				fmt.Println("Cannot publish transaction containing identity/pubkey")
+			}
+		}
+	}()
 	return g, nil
 }
 
