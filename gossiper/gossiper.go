@@ -104,7 +104,7 @@ func NewGossiper(clientAddress, gossipAddress, name, peers string, simpleBroadca
 
 	ks, err := common.LoadKeyStorageFromDisk()
 	if err != nil {
-		ks, err := common.GenerateNewKeyStorage()
+		ks, err = common.GenerateNewKeyStorage()
 		if err != nil {
 			return nil, err
 		}
@@ -138,7 +138,7 @@ func NewGossiper(clientAddress, gossipAddress, name, peers string, simpleBroadca
 		}
 	}()
 	g.blockchain.startMining(newBlocks)
-
+	
 	tx := common.TxPublish{
 		Mapping: common.CreateNewIdendityPKeyMapping(g.name, g.keychain.AsymmetricPrivKey),
 	}
