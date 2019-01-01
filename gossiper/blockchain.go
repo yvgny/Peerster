@@ -130,7 +130,7 @@ func (bc *Blockchain) AddBlock(block common.Block, minedLocally bool) bool {
 
 	// f should return true to continue the iteration. False will stop.
 	forEachBlockInFork := func(lastBlock *common.Block, f func(*common.Block) bool) {
-		for node, present := lastBlock, true; present; node, present = bc.getBlock(node.PrevHash) {
+		for node, present := lastBlock, lastBlock != nil; present; node, present = bc.getBlock(node.PrevHash) {
 			shouldContinue := f(node)
 			if !shouldContinue {
 				return
