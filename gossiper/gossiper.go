@@ -144,7 +144,7 @@ func NewGossiper(clientAddress, gossipAddress, name, peers string, simpleBroadca
 	}
 	clonedTx := tx.Clone()
 	go func() {
-		rtimer := time.NewTicker(5 * time.Second)
+		rtimer := time.NewTicker(common.OriginPubkeyPairPublicationDelay)
 		select {
 		case <-rtimer.C:
 			if valid := g.blockchain.HandleTx(tx); valid {
