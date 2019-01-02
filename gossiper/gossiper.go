@@ -103,7 +103,8 @@ func NewGossiper(clientAddress, gossipAddress, name, peers string, simpleBroadca
 	}
 
 	ks, err := common.LoadKeyStorageFromDisk()
-	if err != nil {
+	isRestarting := err == nil // Whether the peer was stopped and restarted
+	if !isRestarting {
 		ks, err = common.GenerateNewKeyStorage()
 		if err != nil {
 			return nil, err
@@ -143,20 +144,22 @@ func NewGossiper(clientAddress, gossipAddress, name, peers string, simpleBroadca
 		Mapping: common.CreateNewIdendityPKeyMapping(g.name, g.keychain.AsymmetricPrivKey),
 	}
 	clonedTx := tx.Clone()
-	go func() {
-		bcSize := uint64(0)
-		for bcSize < common.NbBlocksBeforeOriginPubkeyPairPublication {
-			g.blockchain.Lock()
-			bcSize = g.blockchain.currentHeight
-			g.blockchain.Unlock()
-		}
-		if valid := g.blockchain.HandleTx(tx); valid {
-			_ = g.PublishTransaction(*clonedTx)
-			fmt.Println("Publish transaction containing identity/pubkey")
-		} else {
-			fmt.Println("Cannot publish transaction containing identity/pubkey")
-		}
-	}()
+	if !isRestarting {
+		go func() {
+			bcSize := uint64(0)
+			for bcSize < common.NbBlocksBeforeOriginPubkeyPairPublication {
+				g.blockchain.Lock()
+				bcSize = g.blockchain.currentHeight
+				g.blockchain.Unlock()
+			}
+			if valid := g.blockchain.HandleTx(tx); valid {
+				_ = g.PublishTransaction(*clonedTx)
+				fmt.Println("Publish transaction containing identity/pubkey")
+			} else {
+				fmt.Println("Cannot publish transaction containing identity/pubkey")
+			}
+		}()
+	}
 	return g, nil
 }
 
