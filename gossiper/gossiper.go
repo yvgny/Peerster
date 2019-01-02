@@ -138,21 +138,23 @@ func NewGossiper(clientAddress, gossipAddress, name, peers string, simpleBroadca
 		}
 	}()
 	g.blockchain.startMining(newBlocks)
-	
+
 	tx := common.TxPublish{
 		Mapping: common.CreateNewIdendityPKeyMapping(g.name, g.keychain.AsymmetricPrivKey),
 	}
 	clonedTx := tx.Clone()
 	go func() {
-		rtimer := time.NewTicker(common.OriginPubkeyPairPublicationDelay)
-		select {
-		case <-rtimer.C:
-			if valid := g.blockchain.HandleTx(tx); valid {
-				_ = g.PublishTransaction(*clonedTx)
-				fmt.Println("Publish transaction containing identity/pubkey")
-			} else {
-				fmt.Println("Cannot publish transaction containing identity/pubkey")
-			}
+		bcSize := uint64(0)
+		for bcSize < common.NbBlocksBeforeOriginPubkeyPairPublication {
+			g.blockchain.Lock()
+			bcSize = g.blockchain.currentHeight
+			g.blockchain.Unlock()
+		}
+		if valid := g.blockchain.HandleTx(tx); valid {
+			_ = g.PublishTransaction(*clonedTx)
+			fmt.Println("Publish transaction containing identity/pubkey")
+		} else {
+			fmt.Println("Cannot publish transaction containing identity/pubkey")
 		}
 	}()
 	return g, nil
