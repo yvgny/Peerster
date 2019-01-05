@@ -1,7 +1,10 @@
 package gossiper
 
 import (
+	"bytes"
+	"crypto/rsa"
 	"crypto/sha256"
+	"crypto/x509"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -145,22 +148,41 @@ func NewGossiper(clientAddress, gossipAddress, name, peers string, simpleBroadca
 	}
 	clonedTx := tx.Clone()
 	if !isRestarting {
-		go func() {
-			bcSize := uint64(0)
-			for bcSize < common.NbBlocksBeforeOriginPubkeyPairPublication {
-				g.blockchain.Lock()
-				bcSize = g.blockchain.currentHeight
-				g.blockchain.Unlock()
-			}
-			if valid := g.blockchain.HandleTx(tx); valid {
-				_ = g.PublishTransaction(*clonedTx)
-				fmt.Println("Publish transaction containing identity/pubkey")
-			} else {
-				fmt.Println("Cannot publish transaction containing identity/pubkey")
-			}
-		}()
+		go publishOriginPubkeyPair(*clonedTx, g)
 	}
 	return g, nil
+}
+
+func publishOriginPubkeyPair(tx common.TxPublish, g *Gossiper) {
+	if valid := g.blockchain.HandleTx(tx); valid {
+		_ = g.PublishTransaction(tx)
+		fmt.Println("Publish transaction containing identity/pubkey")
+	} else {
+		fmt.Println("Cannot publish transaction containing identity/pubkey")
+	}
+	g.blockchain.Lock()
+	startSize := g.blockchain.currentHeight
+	bcSize := startSize
+	g.blockchain.Unlock()
+	for bcSize >= startSize && bcSize - startSize < common.ConfirmationThreshold {
+		g.blockchain.Lock()
+		bcSize = g.blockchain.currentHeight
+		g.blockchain.Unlock()
+		time.Sleep(time.Second)
+	}
+
+	rsaPubkey, found := g.blockchain.pubKeyMapping.Load(g.name)
+	if !found {
+		publishOriginPubkeyPair(tx, g)
+		return
+	}
+
+	pubkeyByte := x509.MarshalPKCS1PublicKey(rsaPubkey.(*rsa.PublicKey))
+	if !bytes.Equal(tx.Mapping.PublicKey, pubkeyByte) {
+		publishOriginPubkeyPair(tx, g)
+		return
+	}
+	fmt.Println("pubkey confirmed")
 }
 
 // Start two listeners : one for the client side (listening on UIPort) and one
