@@ -176,17 +176,28 @@ func (bc *Blockchain) AddBlock(block common.Block, minedLocally bool) bool {
 			prevHash := node.PrevHash
 			out += fmt.Sprintf("%s:%s:", hex.EncodeToString(hash[:]), hex.EncodeToString(prevHash[:]))
 			if len(node.Transactions) > 0 {
-				txs := ""
+				filenames := ""
+				origins := ""
 				for _, tx := range node.Transactions {
 					if tx.File != nil {
-						txs += fmt.Sprintf("%s,", tx.File.Name)
+						filenames += fmt.Sprintf("%s,", tx.File.Name)
 					}
 					if tx.Mapping != nil {
-						txs += fmt.Sprintf("%s,", hex.EncodeToString(tx.Mapping.PublicKey))
+						origins += fmt.Sprintf("%s,", tx.Mapping.Identity)
 					}
 				}
-				txs = strings.TrimSuffix(txs, ",")
-				out += txs
+				filenames = strings.TrimSuffix(filenames, ",")
+				if len(filenames) > 0 {
+					filenames = "Filenames=" + filenames
+				}
+				origins = strings.TrimSuffix(origins, ",")
+				if len(origins) > 0 {
+					if len(filenames) > 0 {
+						filenames += ":"
+					}
+					origins = "Origins=" + origins
+				}
+				out += filenames + origins
 			}
 			return true
 		})
