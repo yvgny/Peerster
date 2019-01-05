@@ -2,6 +2,7 @@ package gossiper
 
 import (
 	"bytes"
+	"crypto/x509"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -159,7 +160,6 @@ func (bc *Blockchain) AddBlock(block common.Block, minedLocally bool) bool {
 			return false
 		}
 	}
-
 	removeInvalidTransaction := func() {
 		currentTxs := append([]common.TxPublish(nil), bc.pendingTransactions...)
 		bc.pendingTransactions = make([]common.TxPublish, 0)
@@ -204,7 +204,6 @@ func (bc *Blockchain) AddBlock(block common.Block, minedLocally bool) bool {
 		removeInvalidTransaction()
 		printChain(&block)
 	} else if height > bc.currentHeight {
-
 		//
 		// swap to longest fork
 		//
@@ -213,7 +212,7 @@ func (bc *Blockchain) AddBlock(block common.Block, minedLocally bool) bool {
 		bc.pubKeyMapping = sync.Map{}
 		bc.storeNewBlock(block)
 		forEachBlockInFork(&block, func(node *common.Block) bool {
-			bc.addNewMappings(block.Transactions)
+			bc.addNewMappings(node.Transactions)
 			return true
 		})
 		bc.currentHeight = height
@@ -265,14 +264,17 @@ func (bc *Blockchain) AddBlock(block common.Block, minedLocally bool) bool {
 
 // Add new mappings. Should be called when a write lock on the Blockchain is taken !
 func (bc *Blockchain) addNewMappings(txs []common.TxPublish) {
-	for _, tx := range txs {
+ 	for _, tx := range txs {
 		if tx.File != nil {
 			bc.mappings.Store(tx.File.Name, hex.EncodeToString(tx.File.MetafileHash))
 		}
 		if tx.Mapping != nil {
-			encodedPubkey := hex.EncodeToString(tx.Mapping.PublicKey)
-			bc.claimedPubkey.Store(encodedPubkey)
-			bc.pubKeyMapping.Store(tx.Mapping.Identity, encodedPubkey)
+			bc.claimedPubkey.Store(hex.EncodeToString(tx.Mapping.PublicKey))
+			rsaPubkey, err := x509.ParsePKCS1PublicKey(tx.Mapping.PublicKey)
+			if err != nil {
+				fmt.Println("Error while parsing public key")
+			}
+			bc.pubKeyMapping.Store(tx.Mapping.Identity, rsaPubkey)
 		}
 	}
 }
@@ -338,7 +340,6 @@ func (bc *Blockchain) startMining(minedBlocks chan<- common.Block) {
 						timer := time.NewTimer(elapsedTime * 2)
 						<-timer.C
 					}
-
 					minedBlocks <- block
 					hash := block.Hash()
 					lastFoundBlockTime = time.Now()
