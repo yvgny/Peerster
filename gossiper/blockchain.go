@@ -79,6 +79,10 @@ func (g *Gossiper) PublishTransaction(tx common.TxPublish) error {
 
 // return true if transaction has been added (= valid + not seen for the moment)
 func (bc *Blockchain) HandleTx(tx common.TxPublish) bool {
+	if tx.Mapping != nil && !tx.Mapping.VerifySignature() {
+		fmt.Println("tx signature not verified")
+		return false
+	}
 	bc.Lock()
 	defer bc.Unlock()
 	return bc.handleTxWithoutLock(tx)

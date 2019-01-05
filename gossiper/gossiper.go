@@ -143,12 +143,11 @@ func NewGossiper(clientAddress, gossipAddress, name, peers string, simpleBroadca
 	}()
 	g.blockchain.startMining(newBlocks)
 
-	tx := common.TxPublish{
-		Mapping: common.CreateNewIdendityPKeyMapping(g.name, g.keychain.AsymmetricPrivKey),
-	}
-	clonedTx := tx.Clone()
 	if !isRestarting {
-		go publishOriginPubkeyPair(*clonedTx, g)
+		tx := common.TxPublish{
+			Mapping: common.CreateNewIdendityPKeyMapping(g.name, g.keychain.AsymmetricPrivKey),
+		}
+		go publishOriginPubkeyPair(tx, g)
 	}
 	return g, nil
 }
