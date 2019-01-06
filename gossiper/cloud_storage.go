@@ -1,6 +1,7 @@
 package gossiper
 
 import (
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -107,7 +108,7 @@ func (cs *CloudStorage) saveCloudStorageOnDiskWithoutLock() error {
 	return nil
 }
 
-func (g *Gossiper) DownloadFileFromCloud(filename string) error {
+func (g *Gossiper) DownloadFileFromCloud(filename string, blockchain *Blockchain) error {
 	fileInfo, _ := g.cloudStorage.GetInfoOfFile(filename)
 
 	var metaHash [32]byte
@@ -138,10 +139,14 @@ func (g *Gossiper) DownloadFileFromCloud(filename string) error {
 		timer := time.NewTimer(common.CloudSearchTimeout)
 		select {
 		case reply := <-channel:
-			//TODO : get public key, to verify signature
-			/*if reply.VerifySignature(nil, nonce) {
+			println("RECEIVED SOMETHING ON MY CHANNEL !!!")
+			pubkey, found := blockchain.getPubKey(reply.Origin)
+			if !found {
 				continue
-			}*/
+			}
+			if reply.VerifySignature(pubkey, nonce) {
+				continue
+			}
 			g.data.addChunkLocation(fileInfo.MetaHash, filename, reply.OwnedChunks, fileInfo.ChunkCount, reply.Origin)
 			if g.data.remoteFileIsMatch(fileInfo.MetaHash) {
 				err = g.downloadFile("", metaHash[:], filename, &g.keychain.SymmetricKey)
@@ -159,7 +164,7 @@ func (g *Gossiper) DownloadFileFromCloud(filename string) error {
 	}
 }
 
-func (g *Gossiper) UploadFileToCloud(filename string) (*LocalFile, error) {
+func (g *Gossiper) UploadFileToCloud(filename string, blockchain *Blockchain) (*LocalFile, error) {
 	//TODO Choose right path for files to upload
 	fileInfo, err := g.data.addLocalFile(filepath.Join(common.CloudFilesUploadFolder, filename), &g.keychain.SymmetricKey)
 	if err != nil {
@@ -205,14 +210,17 @@ func (g *Gossiper) UploadFileToCloud(filename string) (*LocalFile, error) {
 	for {
 		select {
 		case ack := <-channel:
-			//TODO : get public key, to verify signature
-			/*chunksHash, err := g.data.HashChunksOfLocalFile(metaHashSlice, ack.UploadedChunks, sha256.New())
+			pubKey, found := blockchain.getPubKey(ack.Origin)
+			if !found {
+				continue
+			}
+			chunksHash, err := g.data.HashChunksOfLocalFile(metaHashSlice, ack.UploadedChunks, sha256.New())
 			if err != nil {
 				continue
 			}
-			if !ack.VerifySignature(nil, nonce, chunksHash) {
+			if !ack.VerifySignature(pubKey, nonce, chunksHash) {
 				continue
-			}*/
+			}
 			g.data.addChunkLocation(metaHashStr, filename, ack.UploadedChunks, localFile.ChunkCount, ack.Origin)
 			if g.data.remoteFileIsMatch(metaHashStr) {
 				if !foundFullMatch {
@@ -231,16 +239,16 @@ func (g *Gossiper) UploadFileToCloud(filename string) (*LocalFile, error) {
 	}
 }
 
-func (g *Gossiper) HandleClientCloudRequest(filename string) error {
+func (g *Gossiper) HandleClientCloudRequest(filename string, blockchain *Blockchain) error {
 	if exists := g.cloudStorage.Exists(filename); exists {
 		println("DOWNLOADING FILE FROM CLOUD")
-		err := g.DownloadFileFromCloud(filename)
+		err := g.DownloadFileFromCloud(filename, blockchain)
 		if err != nil {
 			return errors.New(fmt.Sprintf("Cannot download file from cloud: %s\n", err.Error()))
 		}
 	} else {
 		println("UPLOADING FILE TO CLOUD")
-		hash, err := g.UploadFileToCloud(filename)
+		hash, err := g.UploadFileToCloud(filename, blockchain)
 		if err != nil {
 			return errors.New(fmt.Sprintf("Cannot upload file to cloud: %s\n", err.Error()))
 		}

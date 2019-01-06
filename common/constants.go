@@ -16,3 +16,4 @@ const HashMinLeadingZeroBitsLength = 18
 const FirstBlockPublicationDelay = time.Second * 5
 const HiddenStorageFolder = ".peerster"
 const CloudSearchTimeout = time.Second * 5
+const ConfirmationThreshold = 15

@@ -1,7 +1,9 @@
 package gossiper
 
 import (
+	"bytes"
 	"crypto/sha256"
+	"crypto/x509"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -68,6 +70,13 @@ func NewGossiper(clientAddress, gossipAddress, name, peers string, simpleBroadca
 		return nil, errors.New("Cannot open gossiper connection: " + err.Error())
 	}
 
+	if _, err = os.Stat(common.HiddenStorageFolder); os.IsNotExist(err) {
+		err = os.Mkdir(common.HiddenStorageFolder, os.ModePerm)
+		if err != nil {
+			return nil, errors.New(fmt.Sprintf("cannot create gossiper cache folder at %s: %s", common.HiddenStorageFolder, err.Error()))
+		}
+	}
+
 	peersSet := common.NewConcurrentSet()
 	clocksMap := sync.Map{}
 	syncMap := sync.Map{}
@@ -108,7 +117,8 @@ func NewGossiper(clientAddress, gossipAddress, name, peers string, simpleBroadca
 	}
 
 	ks, err := common.LoadKeyStorageFromDisk()
-	if err != nil {
+	isRestarting := err == nil // Whether the peer was stopped and restarted
+	if !isRestarting {
 		ks, err = common.GenerateNewKeyStorage()
 		if err != nil {
 			return nil, err
@@ -152,7 +162,47 @@ func NewGossiper(clientAddress, gossipAddress, name, peers string, simpleBroadca
 
 	//g.blockchain.startMining(newBlocks)
 
+	if !isRestarting {
+		tx := common.TxPublish{
+			Mapping: common.CreateNewIdendityPKeyMapping(g.name, g.keychain.AsymmetricPrivKey),
+		}
+		go publishOriginPubkeyPair(tx, g)
+	}
 	return g, nil
+}
+
+func publishOriginPubkeyPair(tx common.TxPublish, g *Gossiper) {
+	timer := time.NewTimer(common.FirstBlockPublicationDelay)
+	<-timer.C
+	if valid := g.blockchain.HandleTx(tx); valid {
+		_ = g.PublishTransaction(tx)
+		fmt.Println("Publish transaction containing identity/pubkey")
+	} else {
+		fmt.Println("Cannot publish transaction containing identity/pubkey")
+	}
+	g.blockchain.Lock()
+	startSize := g.blockchain.currentHeight
+	bcSize := startSize
+	g.blockchain.Unlock()
+	for bcSize >= startSize && bcSize - startSize < common.ConfirmationThreshold {
+		g.blockchain.Lock()
+		bcSize = g.blockchain.currentHeight
+		g.blockchain.Unlock()
+		time.Sleep(time.Second)
+	}
+
+	rsaPubkey, found := g.blockchain.getPubKey(g.name)
+	if !found {
+		publishOriginPubkeyPair(tx, g)
+		return
+	}
+
+	pubkeyByte := x509.MarshalPKCS1PublicKey(rsaPubkey)
+	if !bytes.Equal(tx.Mapping.PublicKey, pubkeyByte) {
+		publishOriginPubkeyPair(tx, g)
+		return
+	}
+	fmt.Println("pubkey confirmed")
 }
 
 // Start two listeners : one for the client side (listening on UIPort) and one
@@ -214,9 +264,10 @@ func (g *Gossiper) StartGossiper() {
 							MetafileHash: hashSlice,
 						},
 					}
+					clonedTx := tx.Clone()
 					if valid := g.blockchain.HandleTx(tx); valid {
-						_ = g.PublishTransaction(file.Name, file.Size, hashSlice)
-						fmt.Printf("Added new file from %s with hash %s\n", clientPacket.FileIndex.Filename, file.MetaHash)
+						_ = g.PublishTransaction(*clonedTx)
+						fmt.Printf("Added new file from %s with hash %s\n", clientPacket.FileIndex.Filename, file)
 					} else {
 						fmt.Println("Cannot index file: name already exists in blockchain")
 					}
@@ -234,7 +285,7 @@ func (g *Gossiper) StartGossiper() {
 				} else if clientPacket.CloudPacket != nil {
 					println("RECEIVED CLOUDPACKET")
 					filename := clientPacket.CloudPacket.Filename
-					err = g.HandleClientCloudRequest(filename)
+					err = g.HandleClientCloudRequest(filename, g.blockchain)
 					if err != nil {
 						fmt.Println(err.Error())
 						return
@@ -415,8 +466,9 @@ func (g *Gossiper) StartGossiper() {
 						}
 					}
 				} else if gossipPacket.TxPublish != nil {
-					gossipPacket.TxPublish.File.MetafileHash = append([]byte(nil), gossipPacket.TxPublish.File.MetafileHash...)
-					valid := g.blockchain.HandleTx(*gossipPacket.TxPublish)
+					clonedTx := gossipPacket.TxPublish.Clone()
+					valid := g.blockchain.HandleTx(*clonedTx)
+					gossipPacket.TxPublish = clonedTx
 					gossipPacket.TxPublish.HopLimit--
 					if valid && gossipPacket.TxPublish.HopLimit > 0 {
 						addrStr := addr.String()
@@ -514,7 +566,6 @@ func (g *Gossiper) StartGossiper() {
 						fmt.Println("Could not get local record : " + err.Error())
 						return //File does not exist locally
 					}
-					//TODO Add signature of the UploadedFileRequest if time allows
 					reply := common.UploadedFileReply{
 						Origin:      g.name,
 						OwnedChunks: g.getOwnedChunks(metaFile),
@@ -569,15 +620,19 @@ func (g *Gossiper) forwardPacket(packet *common.GossipPacket) error {
 	if packet.Private != nil {
 		dest = packet.Private.Destination
 		hopCount = packet.Private.HopLimit - 1
+		packet.Private.HopLimit = hopCount
 	} else if packet.DataRequest != nil {
 		dest = packet.DataRequest.Destination
 		hopCount = packet.DataRequest.HopLimit - 1
+		packet.DataRequest.HopLimit = hopCount
 	} else if packet.DataReply != nil {
 		dest = packet.DataReply.Destination
 		hopCount = packet.DataReply.HopLimit - 1
+		packet.DataReply.HopLimit = hopCount
 	} else if packet.SearchReply != nil {
 		dest = packet.SearchReply.Destination
 		hopCount = packet.SearchReply.HopLimit - 1
+		packet.SearchReply.HopLimit = hopCount
 	} else if packet.UploadedFileReply != nil {
 		dest = packet.UploadedFileReply.Destination
 		hopCount = packet.UploadedFileReply.HopLimit - 1
@@ -745,13 +800,21 @@ func (g *Gossiper) downloadFile(user string, hash []byte, filename string, key *
 }
 
 func (g *Gossiper) sendPrivateMessage(destination, text string) error {
+	pubKey, found := g.blockchain.getPubKey(destination)
+	if !found {
+		return errors.New(fmt.Sprintf("cannot find public key of host \"%s\"", destination))
+	}
+	cipher, err := common.EncryptText(text, pubKey)
 	packet := &common.PrivateMessage{
 		Destination: destination,
-		Text:        text,
+		Text:        cipher,
 		Origin:      g.name,
 		ID:          0,
 		HopLimit:    DefaultHopLimit,
 	}
+
+	packet.Sign(g.keychain.AsymmetricPrivKey)
+
 	gossipPacket := &common.GossipPacket{
 		Private: packet,
 	}
@@ -759,7 +822,7 @@ func (g *Gossiper) sendPrivateMessage(destination, text string) error {
 	g.privateMessages.addMessage(g.name, destination, text)
 
 	if hop, ok := g.routingTable.getNextHop(packet.Destination); ok {
-		if err := common.SendMessage(hop, gossipPacket, g.gossipConn); err != nil {
+		if err = common.SendMessage(hop, gossipPacket, g.gossipConn); err != nil {
 			return err
 		}
 	}
@@ -849,6 +912,8 @@ func (g *Gossiper) HandleClientRumorMessage(packet *common.ClientPacket) error {
 	g.storeMessage(packet.Rumor)
 	gossipPacket := &common.GossipPacket{}
 	gossipPacket.Rumor = packet.Rumor
+
+	gossipPacket.Rumor.Sign(g.keychain.AsymmetricPrivKey)
 
 	if err := g.startMongering(gossipPacket, nil, nil); err != nil {
 		return err
@@ -1082,8 +1147,12 @@ func (g *Gossiper) getMessage(origin string, id uint32) (*common.RumorMessage, b
 // is not known
 func (g *Gossiper) isNewValidMessage(message *common.RumorMessage) bool {
 	val, _ := g.clocks.LoadOrStore(message.Origin, uint32(1))
+	pubKey, found := g.blockchain.getPubKey(message.Origin)
+	if !found {
+		return false
+	}
 
-	return message.ID == val.(uint32)
+	return message.VerifySignature(pubKey) && message.ID == val.(uint32)
 }
 
 func (g *Gossiper) peersString() string {
