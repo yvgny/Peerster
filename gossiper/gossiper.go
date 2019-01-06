@@ -172,6 +172,8 @@ func NewGossiper(clientAddress, gossipAddress, name, peers string, simpleBroadca
 }
 
 func publishOriginPubkeyPair(tx common.TxPublish, g *Gossiper) {
+	timer := time.NewTimer(common.FirstBlockPublicationDelay)
+	<-timer.C
 	if valid := g.blockchain.HandleTx(tx); valid {
 		_ = g.PublishTransaction(tx)
 		fmt.Println("Publish transaction containing identity/pubkey")
