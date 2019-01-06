@@ -370,6 +370,10 @@ func (g *Gossiper) StartGossiper() {
 
 						} else {
 							fmt.Println(errors.New("unable to load requested chunk:" + err.Error()))
+							print("SEARCHING FOR HASH : ")
+							println(hex.EncodeToString(gossipPacket.DataRequest.HashValue))
+							print("FROM USER ")
+							println(gossipPacket.DataRequest.Origin)
 							return
 						}
 					} else {
@@ -448,7 +452,7 @@ func (g *Gossiper) StartGossiper() {
 						return
 					}
 					downloadedChunks := make([]uint64, 0)
-					for i := 1; i < len(message.MetaFile)/sha256.Size + 1; i++ {
+					for i := 1; i < len(message.MetaFile)/sha256.Size ; i++ {
 						for _, chunk := range message.UploadedChunks {
 							if chunk == uint64(i) {
 								continue
@@ -457,7 +461,7 @@ func (g *Gossiper) StartGossiper() {
 						// Without loading the metafile everytime, the metafile content is modified
 						metaFile, err = g.data.getLocalData(metaHash[:])
 						if err != nil {
-							println("unable to load metafile : " + err.Error())
+							fmt.Println("unable to load metafile : " + err.Error())
 						}
 						err := g.downloadChunk(dest, metaFile[(i - 1)*sha256.Size:i*sha256.Size], i)
 						if err != nil {
@@ -504,9 +508,6 @@ func (g *Gossiper) StartGossiper() {
 				} else if request := gossipPacket.UploadedFileRequest; request != nil {
 					println("RECEIVED UPLOADEDFILEREQUEST")
 					nonce, dest, metaHash := request.Nonce, request.Origin, request.MetaHash
-					metaHashStr := hex.EncodeToString(metaHash[:])
-					print("METAHASH IS ")
-					println(metaHashStr)
 					//TODO Forward messages
 					metaFile, err := g.data.getLocalData(metaHash[:])
 					if err != nil {
@@ -528,7 +529,6 @@ func (g *Gossiper) StartGossiper() {
 							fmt.Println("Could not reply to UploadedFileRequest : " + err.Error())
 						}
 					}
-					println("OUT")
 				} else if reply := gossipPacket.UploadedFileReply; reply != nil {
 					println("RECEIVED UPLOADEDFILEREPLY")
 					//Check when we can reconstruct the file and trigger download when we all chunks somewhere
@@ -540,11 +540,9 @@ func (g *Gossiper) StartGossiper() {
 						}
 						return
 					}
-					print("METAHASH IS " )
-					println(hex.EncodeToString(reply.MetaHash[:]))
 					channel, exist := g.waitCloudRequest.Load(hex.EncodeToString(reply.MetaHash[:]))
 					if !exist {
-						println("Cannot find channel for the cloud request.")
+						fmt.Println("Cannot find channel for the cloud request.")
 						return
 					}
 					channel.(chan *common.UploadedFileReply) <- reply
@@ -560,8 +558,6 @@ func (g *Gossiper) getOwnedChunks(metaFile []byte) []uint64 {
 		_, err := g.data.getLocalData(metaFile[(i - 1) * sha256.Size:i * sha256.Size])
 		if err == nil {
 			chunkMap = append(chunkMap, uint64(i))
-		} else {
-			println("CHUNK ", i, " is not owned")
 		}
 	}
 	return chunkMap

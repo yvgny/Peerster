@@ -317,10 +317,8 @@ func BroadcastMessage(hosts []string, message interface{}, sender *string, conn 
 		if sender != nil && host == *sender {
 			continue
 		}
-		println("SENDING MESSAGE TO " + host)
 		err := SendMessage(host, message, conn)
 		if err != nil {
-			println(err.Error())
 			errorList = append(errorList, err)
 		}
 	}

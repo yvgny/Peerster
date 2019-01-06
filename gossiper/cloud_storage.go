@@ -138,15 +138,11 @@ func (g *Gossiper) DownloadFileFromCloud(filename string) error {
 		timer := time.NewTimer(common.CloudSearchTimeout)
 		select {
 		case reply := <-channel:
-			println("RECEIVED SOMETHING ON MY CHANNEL !!!")
 			//TODO : get public key, to verify signature
 			/*if reply.VerifySignature(nil, nonce) {
 				continue
 			}*/
 			g.data.addChunkLocation(fileInfo.MetaHash, filename, reply.OwnedChunks, fileInfo.ChunkCount, reply.Origin)
-			for _, chunk := range reply.OwnedChunks {
-				println(chunk)
-			}
 			if g.data.remoteFileIsMatch(fileInfo.MetaHash) {
 				err = g.downloadFile("", metaHash[:], filename, &g.keychain.SymmetricKey)
 				if err != nil {
@@ -205,7 +201,7 @@ func (g *Gossiper) UploadFileToCloud(filename string) (*LocalFile, error) {
 	g.waitCloudStorage.Store(metaHashStr, channel)
 	foundFullMatch := false
 	//TODO : Determine termination condition
-	timer := time.NewTicker(time.Second * 10)
+	timer := time.NewTicker(time.Second * 30)
 	for {
 		select {
 		case ack := <-channel:
@@ -220,7 +216,7 @@ func (g *Gossiper) UploadFileToCloud(filename string) (*LocalFile, error) {
 			g.data.addChunkLocation(metaHashStr, filename, ack.UploadedChunks, localFile.ChunkCount, ack.Origin)
 			if g.data.remoteFileIsMatch(metaHashStr) {
 				if !foundFullMatch {
-					fmt.Println("FILE CORRECTLY UPLOADED")
+					println("FILE CORRECTLY UPLOADED")
 				}
 				foundFullMatch = true
 			}
