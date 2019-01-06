@@ -1,12 +1,16 @@
 package gossiper
 
 import (
+	"bytes"
+	"crypto/rsa"
 	"crypto/sha256"
+	"crypto/x509"
 	"encoding/hex"
 	"errors"
 	"fmt"
 	"github.com/dedis/protobuf"
 	"github.com/yvgny/Peerster/common"
+	"log"
 	"net"
 	"os"
 	"path/filepath"
@@ -103,7 +107,8 @@ func NewGossiper(clientAddress, gossipAddress, name, peers string, simpleBroadca
 	}
 
 	ks, err := common.LoadKeyStorageFromDisk()
-	if err != nil {
+	isRestarting := err == nil // Whether the peer was stopped and restarted
+	if !isRestarting {
 		ks, err = common.GenerateNewKeyStorage()
 		if err != nil {
 			return nil, err
@@ -139,7 +144,51 @@ func NewGossiper(clientAddress, gossipAddress, name, peers string, simpleBroadca
 	}()
 	g.blockchain.startMining(newBlocks)
 
+	if !isRestarting {
+		tx := common.TxPublish{
+			Mapping: common.CreateNewIdendityPKeyMapping(g.name, g.keychain.AsymmetricPrivKey),
+		}
+		go publishOriginPubkeyPair(tx, g, 0)
+	}
 	return g, nil
+}
+
+func publishOriginPubkeyPair(tx common.TxPublish, g *Gossiper, attempt int) {
+	if attempt >= common.MaxPublicKeyPublishAttempt {
+		log.Fatalf("Did not manage to publish the public key in the blockchain. Number of attempt: %d\n", attempt)
+	}
+	attempt++
+	timer := time.NewTimer(common.FirstBlockPublicationDelay)
+	<-timer.C
+	if valid := g.blockchain.HandleTx(tx); valid {
+		_ = g.PublishTransaction(tx)
+		fmt.Println("Publish transaction containing identity/pubkey")
+	} else {
+		fmt.Println("Cannot publish transaction containing identity/pubkey")
+	}
+	g.blockchain.Lock()
+	startSize := g.blockchain.currentHeight
+	bcSize := startSize
+	g.blockchain.Unlock()
+	for bcSize >= startSize && bcSize - startSize < common.ConfirmationThreshold {
+		g.blockchain.Lock()
+		bcSize = g.blockchain.currentHeight
+		g.blockchain.Unlock()
+		time.Sleep(time.Second)
+	}
+
+	rsaPubkey, found := g.blockchain.pubKeyMapping.Load(g.name)
+	if !found {
+		publishOriginPubkeyPair(tx, g, attempt)
+		return
+	}
+
+	pubkeyByte := x509.MarshalPKCS1PublicKey(rsaPubkey.(*rsa.PublicKey))
+	if !bytes.Equal(tx.Mapping.PublicKey, pubkeyByte) {
+		publishOriginPubkeyPair(tx, g, attempt)
+		return
+	}
+	fmt.Println("pubkey confirmed")
 }
 
 // Start two listeners : one for the client side (listening on UIPort) and one
@@ -198,8 +247,9 @@ func (g *Gossiper) StartGossiper() {
 							MetafileHash: hashSlice,
 						},
 					}
+					clonedTx := tx.Clone()
 					if valid := g.blockchain.HandleTx(tx); valid {
-						_ = g.PublishTransaction(file.Name, file.Size, hash)
+						_ = g.PublishTransaction(*clonedTx)
 						fmt.Printf("Added new file from %s with hash %s\n", clientPacket.FileIndex.Filename, hex.EncodeToString(hash))
 					} else {
 						fmt.Println("Cannot index file: name already exists in blockchain")
@@ -387,8 +437,9 @@ func (g *Gossiper) StartGossiper() {
 						}
 					}
 				} else if gossipPacket.TxPublish != nil {
-					gossipPacket.TxPublish.File.MetafileHash = append([]byte(nil), gossipPacket.TxPublish.File.MetafileHash...)
-					valid := g.blockchain.HandleTx(*gossipPacket.TxPublish)
+					clonedTx := gossipPacket.TxPublish.Clone()
+					valid := g.blockchain.HandleTx(*clonedTx)
+					gossipPacket.TxPublish = clonedTx
 					gossipPacket.TxPublish.HopLimit--
 					if valid && gossipPacket.TxPublish.HopLimit > 0 {
 						addrStr := addr.String()
