@@ -107,9 +107,6 @@ func (bc *Blockchain) handleTxWithoutLock(tx common.TxPublish) bool {
 		_, alreadyClaimed = bc.mappings.Load(tx.File.Name)
 	}
 	if tx.Mapping != nil {
-		if !tx.Mapping.VerifySignature() {
-			return false
-		}
 		alreadyClaimed = alreadyClaimed || bc.claimedPubkey.Exists(hex.EncodeToString(tx.Mapping.PublicKey))
 	}
 
