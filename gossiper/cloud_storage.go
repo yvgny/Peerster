@@ -1,6 +1,7 @@
 package gossiper
 
 import (
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -147,9 +148,6 @@ func (g *Gossiper) DownloadFileFromCloud(filename string, blockchain *Blockchain
 				continue
 			}
 			g.data.addChunkLocation(fileInfo.MetaHash, filename, reply.OwnedChunks, fileInfo.ChunkCount, reply.Origin)
-			for _, chunk := range reply.OwnedChunks {
-				println(chunk)
-			}
 			if g.data.remoteFileIsMatch(fileInfo.MetaHash) {
 				err = g.downloadFile("", metaHash[:], filename, &g.keychain.SymmetricKey)
 				if err != nil {
@@ -208,7 +206,7 @@ func (g *Gossiper) UploadFileToCloud(filename string, blockchain *Blockchain) (*
 	g.waitCloudStorage.Store(metaHashStr, channel)
 	foundFullMatch := false
 	//TODO : Determine termination condition
-	timer := time.NewTicker(time.Second * 10)
+	timer := time.NewTicker(time.Second * 30)
 	for {
 		select {
 		case ack := <-channel:
@@ -226,7 +224,7 @@ func (g *Gossiper) UploadFileToCloud(filename string, blockchain *Blockchain) (*
 			g.data.addChunkLocation(metaHashStr, filename, ack.UploadedChunks, localFile.ChunkCount, ack.Origin)
 			if g.data.remoteFileIsMatch(metaHashStr) {
 				if !foundFullMatch {
-					fmt.Println("FILE CORRECTLY UPLOADED")
+					println("FILE CORRECTLY UPLOADED")
 				}
 				foundFullMatch = true
 			}
