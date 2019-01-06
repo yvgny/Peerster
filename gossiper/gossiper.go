@@ -70,6 +70,13 @@ func NewGossiper(clientAddress, gossipAddress, name, peers string, simpleBroadca
 		return nil, errors.New("Cannot open gossiper connection: " + err.Error())
 	}
 
+	if _, err = os.Stat(common.HiddenStorageFolder); os.IsNotExist(err) {
+		err = os.Mkdir(common.HiddenStorageFolder, os.ModePerm)
+		if err != nil {
+			return nil, errors.New(fmt.Sprintf("cannot create gossiper cache folder at %s: %s", common.HiddenStorageFolder, err.Error()))
+		}
+	}
+
 	peersSet := common.NewConcurrentSet()
 	clocksMap := sync.Map{}
 	syncMap := sync.Map{}
