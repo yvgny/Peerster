@@ -2,6 +2,7 @@ package gossiper
 
 import (
 	"bytes"
+	"crypto/rsa"
 	"crypto/x509"
 	"encoding/hex"
 	"errors"
@@ -106,6 +107,9 @@ func (bc *Blockchain) handleTxWithoutLock(tx common.TxPublish) bool {
 		_, alreadyClaimed = bc.mappings.Load(tx.File.Name)
 	}
 	if tx.Mapping != nil {
+		if !tx.Mapping.VerifySignature() {
+			return false
+		}
 		alreadyClaimed = alreadyClaimed || bc.claimedPubkey.Exists(hex.EncodeToString(tx.Mapping.PublicKey))
 	}
 
@@ -322,6 +326,15 @@ func (bc *Blockchain) getTransactions() []common.TxPublish {
 	}
 
 	return copied
+}
+
+func (bc *Blockchain) getPubKey (name string) (*rsa.PublicKey, bool) {
+	rsaPubkey, found := bc.pubKeyMapping.Load(name)
+	if !found {
+		return nil, false
+	}
+
+	return rsaPubkey.(*rsa.PublicKey), true
 }
 
 func (bc *Blockchain) startMining(minedBlocks chan<- common.Block) {
