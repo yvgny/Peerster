@@ -184,7 +184,7 @@ func publishOriginPubkeyPair(tx common.TxPublish, g *Gossiper) {
 	startSize := g.blockchain.currentHeight
 	bcSize := startSize
 	g.blockchain.Unlock()
-	for bcSize >= startSize && bcSize - startSize < common.ConfirmationThreshold {
+	for bcSize >= startSize && bcSize-startSize < common.ConfirmationThreshold {
 		g.blockchain.Lock()
 		bcSize = g.blockchain.currentHeight
 		g.blockchain.Unlock()
@@ -500,7 +500,7 @@ func (g *Gossiper) StartGossiper() {
 						return
 					}
 					downloadedChunks := make([]uint64, 0)
-					for i := 1; i < len(message.MetaFile)/sha256.Size + 1; i++ {
+					for i := 1; i < len(message.MetaFile)/sha256.Size+1; i++ {
 						for _, chunk := range message.UploadedChunks {
 							if chunk == uint64(i) {
 								continue
@@ -511,7 +511,7 @@ func (g *Gossiper) StartGossiper() {
 						if err != nil {
 							println("unable to load metafile : " + err.Error())
 						}
-						err := g.downloadChunk(dest, metaFile[(i - 1)*sha256.Size:i*sha256.Size], i)
+						err := g.downloadChunk(dest, metaFile[(i-1)*sha256.Size:i*sha256.Size], i)
 						if err != nil {
 							fmt.Printf("Could not download chunk %d : %s\n", i, err.Error())
 						} else {
@@ -591,7 +591,7 @@ func (g *Gossiper) StartGossiper() {
 						}
 						return
 					}
-					print("METAHASH IS " )
+					print("METAHASH IS ")
 					println(hex.EncodeToString(reply.MetaHash[:]))
 					channel, exist := g.waitCloudRequest.Load(hex.EncodeToString(reply.MetaHash[:]))
 					if !exist {
@@ -607,8 +607,8 @@ func (g *Gossiper) StartGossiper() {
 
 func (g *Gossiper) getOwnedChunks(metaFile []byte) []uint64 {
 	chunkMap := make([]uint64, 0)
-	for i := 1 ; i < len(metaFile) / sha256.Size ; i++ {
-		_, err := g.data.getLocalData(metaFile[(i - 1) * sha256.Size:i * sha256.Size])
+	for i := 1; i < len(metaFile)/sha256.Size; i++ {
+		_, err := g.data.getLocalData(metaFile[(i-1)*sha256.Size : i*sha256.Size])
 		if err == nil {
 			chunkMap = append(chunkMap, uint64(i))
 		} else {
@@ -961,6 +961,7 @@ func (g *Gossiper) startRouteRumoring(period time.Duration) {
 		}
 		sendMsg := func() {
 			routeMsg.Rumor.ID = g.incrementClock(g.name)
+			routeMsg.Rumor.Sign(g.keychain.AsymmetricPrivKey)
 			for _, host := range g.peers.Elements() {
 				if err := common.SendMessage(host, &routeMsg, g.gossipConn); err != nil {
 					fmt.Println(err.Error())
