@@ -225,6 +225,47 @@ func (t *TxPublish) Hash() (out [32]byte) {
 	return
 }
 
+func (f *File) Clone() *File {
+	clone := &File{Name: f.Name, Size: f.Size}
+	clone.MetafileHash = make([]byte, len(f.MetafileHash))
+	copy(clone.MetafileHash, f.MetafileHash)
+	return clone
+}
+
+func (s *Signature) Clone() *Signature {
+	var clone Signature
+	clone = make([]byte, len(*s))
+	copy(clone, *s)
+	return &clone
+}
+
+func (id *IdentityPKeyMapping) Clone() *IdentityPKeyMapping {
+	clone := &IdentityPKeyMapping{Identity: id.Identity, Signature: *id.Signature.Clone()}
+	clone.PublicKey = make([]byte, len(id.PublicKey))
+	copy(clone.PublicKey, id.PublicKey)
+	return clone
+}
+
+func (b *Block) Clone() *Block {
+	clone := &Block{PrevHash: b.PrevHash, Nonce: b.Nonce}
+	clone.Transactions = make([]TxPublish, len(b.Transactions))
+	for index, tx := range b.Transactions {
+		clone.Transactions[index] = *tx.Clone()
+	}
+	return clone
+}
+
+func (t *TxPublish) Clone() *TxPublish {
+	clone := &TxPublish{HopLimit: t.HopLimit}
+	if t.File != nil {
+		clone.File = t.File.Clone()
+	}
+	if t.Mapping != nil {
+		clone.Mapping = t.Mapping.Clone()
+	}
+	return clone
+}
+
 func (rm *RumorMessage) Hash() (out [32]byte) {
 	h := sha256.New()
 	h.Write([]byte(rm.Origin))

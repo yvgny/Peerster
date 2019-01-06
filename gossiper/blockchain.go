@@ -1,6 +1,8 @@
 package gossiper
 
 import (
+	"bytes"
+	"crypto/x509"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -21,6 +23,8 @@ type Blockchain struct {
 	currentHeight         uint64
 	mappings              sync.Map
 	changesNotifier       chan Notification
+	pubKeyMapping         sync.Map
+	claimedPubkey		  common.ConcurrentSet
 }
 
 type Notification struct{}
@@ -30,6 +34,7 @@ func NewBlockchain() *Blockchain {
 		pendingTransactions:   []common.TxPublish{},
 		longestChainLastBlock: GenesisBlockHash,
 		changesNotifier:       make(chan Notification, 1),
+		claimedPubkey:         *common.NewConcurrentSet(),
 	}
 }
 
@@ -51,17 +56,9 @@ func (bc *Blockchain) getBlock(hash [32]byte) (*common.Block, bool) {
 	return nil, present
 }
 
-func (g *Gossiper) PublishTransaction(name string, size int64, metafileHash []byte) error {
-	file := common.File{
-		Name:         name,
-		Size:         size,
-		MetafileHash: metafileHash,
-	}
-
-	tx := common.TxPublish{
-		File:     &file,
-		HopLimit: common.TxBroadcastHopLimit,
-	}
+// Make sure tx is a deep copy of the origin TxPublish when calling PublishTransaction
+func (g *Gossiper) PublishTransaction(tx common.TxPublish) error {
+	tx.HopLimit = common.TxBroadcastHopLimit
 
 	packet := common.GossipPacket{
 		TxPublish: &tx,
@@ -82,20 +79,35 @@ func (g *Gossiper) PublishTransaction(name string, size int64, metafileHash []by
 
 // return true if transaction has been added (= valid + not seen for the moment)
 func (bc *Blockchain) HandleTx(tx common.TxPublish) bool {
+	if tx.Mapping != nil && !tx.Mapping.VerifySignature() {
+		fmt.Println("tx signature not verified")
+		return false
+	}
 	bc.Lock()
 	defer bc.Unlock()
 	return bc.handleTxWithoutLock(tx)
 }
 
+func txClaimTheSame(txA common.TxPublish, txB common.TxPublish) bool {
+	return (txA.File != nil && txB.File != nil && txA.File.Name == txB.File.Name) ||
+		   (txA.Mapping != nil && txB.Mapping != nil && bytes.Equal(txA.Mapping.PublicKey, txB.Mapping.PublicKey))
+}
+
 // return true if transaction has been added (= valid + not seen for the moment)
 func (bc *Blockchain) handleTxWithoutLock(tx common.TxPublish) bool {
 	for _, pendingTx := range bc.pendingTransactions {
-		if tx.File.Name == pendingTx.File.Name {
+		if txClaimTheSame(tx, pendingTx) {
 			return false
 		}
 	}
 
-	_, alreadyClaimed := bc.mappings.Load(tx.File.Name)
+	alreadyClaimed := false
+	if tx.File != nil {
+		_, alreadyClaimed = bc.mappings.Load(tx.File.Name)
+	}
+	if tx.Mapping != nil {
+		alreadyClaimed = alreadyClaimed || bc.claimedPubkey.Exists(hex.EncodeToString(tx.Mapping.PublicKey))
+	}
 
 	if alreadyClaimed {
 		return false
@@ -111,10 +123,8 @@ func (bc *Blockchain) handleTxWithoutLock(tx common.TxPublish) bool {
 func (bc *Blockchain) AddBlock(block common.Block, minedLocally bool) bool {
 	bc.Lock()
 	defer bc.Unlock()
-	block.Transactions = append([]common.TxPublish(nil), block.Transactions...)
-	for index, tx := range block.Transactions {
-		block.Transactions[index].File.MetafileHash = append([]byte(nil), tx.File.MetafileHash...)
-	}
+
+	block = *block.Clone()
 
 	height := uint64(1)
 	prevBlock, prevBlockExists := bc.getBlock(block.PrevHash)
@@ -123,9 +133,13 @@ func (bc *Blockchain) AddBlock(block common.Block, minedLocally bool) bool {
 		return false
 	}
 
-	forEachBlockInFork := func(lastBlock *common.Block, f func(*common.Block)) {
-		for node, present := lastBlock, true; present; node, present = bc.getBlock(node.PrevHash) {
-			f(node)
+	// f should return true to continue the iteration. False will stop.
+	forEachBlockInFork := func(lastBlock *common.Block, f func(*common.Block) bool) {
+		for node, present := lastBlock, lastBlock != nil; present; node, present = bc.getBlock(node.PrevHash) {
+			shouldContinue := f(node)
+			if !shouldContinue {
+				return
+			}
 		}
 	}
 
@@ -133,18 +147,23 @@ func (bc *Blockchain) AddBlock(block common.Block, minedLocally bool) bool {
 	if !powIsCorrect(&block) {
 		return false
 	} else if prevBlockExists {
-		forEachBlockInFork(prevBlock, func(node *common.Block) {
+		alreadyClaimed := false
+		forEachBlockInFork(prevBlock, func(node *common.Block) bool {
 			height++
 			for _, tx := range node.Transactions {
 				for _, newTx := range block.Transactions {
-					if tx.File.Name == newTx.File.Name {
-						return
+					if txClaimTheSame(newTx, tx) {
+						alreadyClaimed = true
+						return false
 					}
 				}
 			}
+			return true
 		})
+		if alreadyClaimed {
+			return false
+		}
 	}
-
 	removeInvalidTransaction := func() {
 		currentTxs := append([]common.TxPublish(nil), bc.pendingTransactions...)
 		bc.pendingTransactions = make([]common.TxPublish, 0)
@@ -155,19 +174,36 @@ func (bc *Blockchain) AddBlock(block common.Block, minedLocally bool) bool {
 
 	printChain := func(lastBlock *common.Block) {
 		out := "CHAIN"
-		forEachBlockInFork(lastBlock, func(node *common.Block) {
+		forEachBlockInFork(lastBlock, func(node *common.Block) bool {
 			out += " "
 			hash := node.Hash()
 			prevHash := node.PrevHash
 			out += fmt.Sprintf("%s:%s:", hex.EncodeToString(hash[:]), hex.EncodeToString(prevHash[:]))
 			if len(node.Transactions) > 0 {
-				txs := ""
+				filenames := ""
+				origins := ""
 				for _, tx := range node.Transactions {
-					txs += fmt.Sprintf("%s%s", tx.File.Name, ",")
+					if tx.File != nil {
+						filenames += fmt.Sprintf("%s,", tx.File.Name)
+					}
+					if tx.Mapping != nil {
+						origins += fmt.Sprintf("%s,", tx.Mapping.Identity)
+					}
 				}
-				txs = strings.TrimSuffix(txs, ",")
-				out += txs
+				filenames = strings.TrimSuffix(filenames, ",")
+				if len(filenames) > 0 {
+					filenames = "Filenames=" + filenames
+				}
+				origins = strings.TrimSuffix(origins, ",")
+				if len(origins) > 0 {
+					if len(filenames) > 0 {
+						filenames += ":"
+					}
+					origins = "Origins=" + origins
+				}
+				out += filenames + origins
 			}
+			return true
 		})
 		fmt.Println(out)
 	}
@@ -183,14 +219,16 @@ func (bc *Blockchain) AddBlock(block common.Block, minedLocally bool) bool {
 		removeInvalidTransaction()
 		printChain(&block)
 	} else if height > bc.currentHeight {
-
 		//
 		// swap to longest fork
 		//
 		bc.mappings = sync.Map{}
+		bc.claimedPubkey = *common.NewConcurrentSet()
+		bc.pubKeyMapping = sync.Map{}
 		bc.storeNewBlock(block)
-		forEachBlockInFork(&block, func(node *common.Block) {
-			bc.addNewMappings(block.Transactions)
+		forEachBlockInFork(&block, func(node *common.Block) bool {
+			bc.addNewMappings(node.Transactions)
+			return true
 		})
 		bc.currentHeight = height
 
@@ -202,17 +240,16 @@ func (bc *Blockchain) AddBlock(block common.Block, minedLocally bool) bool {
 		blockHeight := make(map[[32]byte]int)
 		blockHeight[bc.longestChainLastBlock] = rewindedBlock
 		// save height each block in current fork
-		forEachBlockInFork(currentLastBlock, func(node *common.Block) {
+		forEachBlockInFork(currentLastBlock, func(node *common.Block) bool {
 			rewindedBlock++
 			blockHeight[node.PrevHash] = rewindedBlock
+			return true
 		})
 		// find the node where the fork happened
-		forEachBlockInFork(&block, func(node *common.Block) {
+		forEachBlockInFork(&block, func(node *common.Block) bool {
 			exists := false
 			rewindedBlock, exists = blockHeight[node.PrevHash]
-			if exists {
-				return
-			}
+			return !exists
 		})
 
 		// Switch chain
@@ -242,8 +279,18 @@ func (bc *Blockchain) AddBlock(block common.Block, minedLocally bool) bool {
 
 // Add new mappings. Should be called when a write lock on the Blockchain is taken !
 func (bc *Blockchain) addNewMappings(txs []common.TxPublish) {
-	for _, tx := range txs {
-		bc.mappings.Store(tx.File.Name, hex.EncodeToString(tx.File.MetafileHash))
+ 	for _, tx := range txs {
+		if tx.File != nil {
+			bc.mappings.Store(tx.File.Name, hex.EncodeToString(tx.File.MetafileHash))
+		}
+		if tx.Mapping != nil {
+			bc.claimedPubkey.Store(hex.EncodeToString(tx.Mapping.PublicKey))
+			rsaPubkey, err := x509.ParsePKCS1PublicKey(tx.Mapping.PublicKey)
+			if err != nil {
+				fmt.Println("Error while parsing public key")
+			}
+			bc.pubKeyMapping.Store(tx.Mapping.Identity, rsaPubkey)
+		}
 	}
 }
 
@@ -271,7 +318,7 @@ func (bc *Blockchain) getTransactions() []common.TxPublish {
 	copied := make([]common.TxPublish, len(bc.pendingTransactions))
 	copy(copied, bc.pendingTransactions)
 	for index, tx := range copied {
-		copied[index].File.MetafileHash = append([]byte(nil), tx.File.MetafileHash...)
+		copied[index] = *tx.Clone()
 	}
 
 	return copied
@@ -308,7 +355,6 @@ func (bc *Blockchain) startMining(minedBlocks chan<- common.Block) {
 						timer := time.NewTimer(elapsedTime * 2)
 						<-timer.C
 					}
-
 					minedBlocks <- block
 					hash := block.Hash()
 					lastFoundBlockTime = time.Now()

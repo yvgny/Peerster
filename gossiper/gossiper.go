@@ -1,7 +1,10 @@
 package gossiper
 
 import (
+	"bytes"
+	"crypto/rsa"
 	"crypto/sha256"
+	"crypto/x509"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -108,7 +111,8 @@ func NewGossiper(clientAddress, gossipAddress, name, peers string, simpleBroadca
 	}
 
 	ks, err := common.LoadKeyStorageFromDisk()
-	if err != nil {
+	isRestarting := err == nil // Whether the peer was stopped and restarted
+	if !isRestarting {
 		ks, err = common.GenerateNewKeyStorage()
 		if err != nil {
 			return nil, err
@@ -152,7 +156,45 @@ func NewGossiper(clientAddress, gossipAddress, name, peers string, simpleBroadca
 
 	g.blockchain.startMining(newBlocks)
 
+	if !isRestarting {
+		tx := common.TxPublish{
+			Mapping: common.CreateNewIdendityPKeyMapping(g.name, g.keychain.AsymmetricPrivKey),
+		}
+		go publishOriginPubkeyPair(tx, g)
+	}
 	return g, nil
+}
+
+func publishOriginPubkeyPair(tx common.TxPublish, g *Gossiper) {
+	if valid := g.blockchain.HandleTx(tx); valid {
+		_ = g.PublishTransaction(tx)
+		fmt.Println("Publish transaction containing identity/pubkey")
+	} else {
+		fmt.Println("Cannot publish transaction containing identity/pubkey")
+	}
+	g.blockchain.Lock()
+	startSize := g.blockchain.currentHeight
+	bcSize := startSize
+	g.blockchain.Unlock()
+	for bcSize >= startSize && bcSize - startSize < common.ConfirmationThreshold {
+		g.blockchain.Lock()
+		bcSize = g.blockchain.currentHeight
+		g.blockchain.Unlock()
+		time.Sleep(time.Second)
+	}
+
+	rsaPubkey, found := g.blockchain.pubKeyMapping.Load(g.name)
+	if !found {
+		publishOriginPubkeyPair(tx, g)
+		return
+	}
+
+	pubkeyByte := x509.MarshalPKCS1PublicKey(rsaPubkey.(*rsa.PublicKey))
+	if !bytes.Equal(tx.Mapping.PublicKey, pubkeyByte) {
+		publishOriginPubkeyPair(tx, g)
+		return
+	}
+	fmt.Println("pubkey confirmed")
 }
 
 // Start two listeners : one for the client side (listening on UIPort) and one
@@ -214,9 +256,10 @@ func (g *Gossiper) StartGossiper() {
 							MetafileHash: hashSlice,
 						},
 					}
+					clonedTx := tx.Clone()
 					if valid := g.blockchain.HandleTx(tx); valid {
-						_ = g.PublishTransaction(file.Name, file.Size, hashSlice)
-						fmt.Printf("Added new file from %s with hash %s\n", clientPacket.FileIndex.Filename, file.MetaHash)
+						_ = g.PublishTransaction(*clonedTx)
+						fmt.Printf("Added new file from %s with hash %s\n", clientPacket.FileIndex.Filename, file)
 					} else {
 						fmt.Println("Cannot index file: name already exists in blockchain")
 					}
@@ -410,8 +453,9 @@ func (g *Gossiper) StartGossiper() {
 						}
 					}
 				} else if gossipPacket.TxPublish != nil {
-					gossipPacket.TxPublish.File.MetafileHash = append([]byte(nil), gossipPacket.TxPublish.File.MetafileHash...)
-					valid := g.blockchain.HandleTx(*gossipPacket.TxPublish)
+					clonedTx := gossipPacket.TxPublish.Clone()
+					valid := g.blockchain.HandleTx(*clonedTx)
+					gossipPacket.TxPublish = clonedTx
 					gossipPacket.TxPublish.HopLimit--
 					if valid && gossipPacket.TxPublish.HopLimit > 0 {
 						addrStr := addr.String()
@@ -541,15 +585,19 @@ func (g *Gossiper) forwardPacket(packet *common.GossipPacket) error {
 	if packet.Private != nil {
 		dest = packet.Private.Destination
 		hopCount = packet.Private.HopLimit - 1
+		packet.Private.HopLimit = hopCount
 	} else if packet.DataRequest != nil {
 		dest = packet.DataRequest.Destination
 		hopCount = packet.DataRequest.HopLimit - 1
+		packet.DataRequest.HopLimit = hopCount
 	} else if packet.DataReply != nil {
 		dest = packet.DataReply.Destination
 		hopCount = packet.DataReply.HopLimit - 1
+		packet.DataReply.HopLimit = hopCount
 	} else if packet.SearchReply != nil {
 		dest = packet.SearchReply.Destination
 		hopCount = packet.SearchReply.HopLimit - 1
+		packet.SearchReply.HopLimit = hopCount
 	} else if packet.UploadedFileReply != nil {
 		dest = packet.UploadedFileReply.Destination
 		hopCount = packet.UploadedFileReply.HopLimit - 1
