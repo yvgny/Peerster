@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"github.com/dedis/protobuf"
 	"github.com/yvgny/Peerster/common"
+	"log"
 	"net"
 	"os"
 	"path/filepath"
@@ -147,12 +148,16 @@ func NewGossiper(clientAddress, gossipAddress, name, peers string, simpleBroadca
 		tx := common.TxPublish{
 			Mapping: common.CreateNewIdendityPKeyMapping(g.name, g.keychain.AsymmetricPrivKey),
 		}
-		go publishOriginPubkeyPair(tx, g)
+		go publishOriginPubkeyPair(tx, g, 0)
 	}
 	return g, nil
 }
 
-func publishOriginPubkeyPair(tx common.TxPublish, g *Gossiper) {
+func publishOriginPubkeyPair(tx common.TxPublish, g *Gossiper, attempt int) {
+	if attempt >= common.MaxPublicKeyPublishAttempt {
+		log.Fatalf("Did not manage to publish the public key in the blockchain. Number of attempt: %d\n", attempt)
+	}
+	attempt++
 	timer := time.NewTimer(common.FirstBlockPublicationDelay)
 	<-timer.C
 	if valid := g.blockchain.HandleTx(tx); valid {
@@ -174,13 +179,13 @@ func publishOriginPubkeyPair(tx common.TxPublish, g *Gossiper) {
 
 	rsaPubkey, found := g.blockchain.pubKeyMapping.Load(g.name)
 	if !found {
-		publishOriginPubkeyPair(tx, g)
+		publishOriginPubkeyPair(tx, g, attempt)
 		return
 	}
 
 	pubkeyByte := x509.MarshalPKCS1PublicKey(rsaPubkey.(*rsa.PublicKey))
 	if !bytes.Equal(tx.Mapping.PublicKey, pubkeyByte) {
-		publishOriginPubkeyPair(tx, g)
+		publishOriginPubkeyPair(tx, g, attempt)
 		return
 	}
 	fmt.Println("pubkey confirmed")

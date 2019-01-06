@@ -15,3 +15,4 @@ const HashMinLeadingZeroBitsLength = 18
 const FirstBlockPublicationDelay = time.Second * 5
 const HiddenStorageFolder = ".peerster"
 const ConfirmationThreshold = 15
+const MaxPublicKeyPublishAttempt = 10
