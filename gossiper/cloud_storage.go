@@ -1,7 +1,6 @@
 package gossiper
 
 import (
-	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -131,19 +130,23 @@ func (g *Gossiper) DownloadFileFromCloud(filename string) error {
 			MetaHash: metaHash,
 		},
 	}
-	common.BroadcastMessage(g.peers.Elements(), request, nil, g.gossipConn)
+	common.BroadcastMessage(g.peers.Elements(), &request, nil, g.gossipConn)
 
 	channel := make(chan *common.UploadedFileReply)
-	g.waitCloudRequest.Store(fileInfo, channel)
+	g.waitCloudRequest.Store(fileInfo.MetaHash, channel)
 	for {
 		timer := time.NewTimer(common.CloudSearchTimeout)
 		select {
 		case reply := <-channel:
+			println("RECEIVED SOMETHING ON MY CHANNEL !!!")
 			//TODO : get public key, to verify signature
-			if reply.VerifySignature(nil, nonce) {
+			/*if reply.VerifySignature(nil, nonce) {
 				continue
-			}
+			}*/
 			g.data.addChunkLocation(fileInfo.MetaHash, filename, reply.OwnedChunks, fileInfo.ChunkCount, reply.Origin)
+			for _, chunk := range reply.OwnedChunks {
+				println(chunk)
+			}
 			if g.data.remoteFileIsMatch(fileInfo.MetaHash) {
 				err = g.downloadFile("", metaHash[:], filename, &g.keychain.SymmetricKey)
 				if err != nil {
@@ -192,7 +195,7 @@ func (g *Gossiper) UploadFileToCloud(filename string) (*LocalFile, error) {
 	gossipPacket := common.GossipPacket{
 		FileUploadMessage: &message,
 	}
-	common.BroadcastMessage(g.peers.Elements(), gossipPacket, nil, g.gossipConn)
+	common.BroadcastMessage(g.peers.Elements(), &gossipPacket, nil, g.gossipConn)
 
 	localFile, err := g.data.getLocalRecord(metaHashStr)
 	if err != nil {
@@ -207,15 +210,18 @@ func (g *Gossiper) UploadFileToCloud(filename string) (*LocalFile, error) {
 		select {
 		case ack := <-channel:
 			//TODO : get public key, to verify signature
-			chunksHash, err := g.data.HashChunksOfLocalFile(metaHashSlice, ack.UploadedChunks, sha256.New())
+			/*chunksHash, err := g.data.HashChunksOfLocalFile(metaHashSlice, ack.UploadedChunks, sha256.New())
 			if err != nil {
 				continue
 			}
 			if !ack.VerifySignature(nil, nonce, chunksHash) {
 				continue
-			}
+			}*/
 			g.data.addChunkLocation(metaHashStr, filename, ack.UploadedChunks, localFile.ChunkCount, ack.Origin)
 			if g.data.remoteFileIsMatch(metaHashStr) {
+				if !foundFullMatch {
+					fmt.Println("FILE CORRECTLY UPLOADED")
+				}
 				foundFullMatch = true
 			}
 		case <-timer.C:
@@ -231,11 +237,13 @@ func (g *Gossiper) UploadFileToCloud(filename string) (*LocalFile, error) {
 
 func (g *Gossiper) HandleClientCloudRequest(filename string) error {
 	if exists := g.cloudStorage.Exists(filename); exists {
+		println("DOWNLOADING FILE FROM CLOUD")
 		err := g.DownloadFileFromCloud(filename)
 		if err != nil {
 			return errors.New(fmt.Sprintf("Cannot download file from cloud: %s\n", err.Error()))
 		}
 	} else {
+		println("UPLOADING FILE TO CLOUD")
 		hash, err := g.UploadFileToCloud(filename)
 		if err != nil {
 			return errors.New(fmt.Sprintf("Cannot upload file to cloud: %s\n", err.Error()))
