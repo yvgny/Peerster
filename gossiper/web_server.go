@@ -238,7 +238,7 @@ func (g *Gossiper) postCloudFile(writer http.ResponseWriter, request *http.Reque
 		writeErrorToHTTP(writer, err)
 	}
 	filename := request.Form.Get("Filename")
-	err = g.HandleClientCloudRequest(filename)
+	err = g.HandleClientCloudRequest(filename, g.blockchain)
 	if err != nil {
 		fmt.Println(err.Error())
 		writeErrorToHTTP(writer, err)
