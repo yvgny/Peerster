@@ -160,7 +160,7 @@ func NewGossiper(clientAddress, gossipAddress, name, peers string, simpleBroadca
 		}
 	}()
 
-	//g.blockchain.startMining(newBlocks)
+	g.blockchain.startMining(newBlocks)
 
 	if !isRestarting {
 		tx := common.TxPublish{
@@ -504,7 +504,7 @@ func (g *Gossiper) StartGossiper() {
 						return
 					}
 					downloadedChunks := make([]uint64, 0)
-					for i := 1; i < len(message.MetaFile)/sha256.Size ; i++ {
+					for i := 1; i < len(message.MetaFile) / sha256.Size + 1; i++ {
 						for _, chunk := range message.UploadedChunks {
 							if chunk == uint64(i) {
 								continue
@@ -605,7 +605,7 @@ func (g *Gossiper) StartGossiper() {
 
 func (g *Gossiper) getOwnedChunks(metaFile []byte) []uint64 {
 	chunkMap := make([]uint64, 0)
-	for i := 1; i < len(metaFile)/sha256.Size; i++ {
+	for i := 1; i < len(metaFile)/sha256.Size + 1; i++ {
 		_, err := g.data.getLocalData(metaFile[(i-1)*sha256.Size : i*sha256.Size])
 		if err == nil {
 			chunkMap = append(chunkMap, uint64(i))

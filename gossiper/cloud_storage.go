@@ -142,9 +142,11 @@ func (g *Gossiper) DownloadFileFromCloud(filename string, blockchain *Blockchain
 			println("RECEIVED SOMETHING ON MY CHANNEL !!!")
 			pubkey, found := blockchain.getPubKey(reply.Origin)
 			if !found {
+				fmt.Println("The peer " + reply.Origin + " has not yet claimed a public-key")
 				continue
 			}
-			if reply.VerifySignature(pubkey, nonce) {
+			if !reply.VerifySignature(pubkey, nonce) {
+				fmt.Println("Found a non-matching signature, skipping this packet")
 				continue
 			}
 			g.data.addChunkLocation(fileInfo.MetaHash, filename, reply.OwnedChunks, fileInfo.ChunkCount, reply.Origin)
@@ -205,8 +207,8 @@ func (g *Gossiper) UploadFileToCloud(filename string, blockchain *Blockchain) (*
 	channel := make(chan *common.FileUploadAck)
 	g.waitCloudStorage.Store(metaHashStr, channel)
 	foundFullMatch := false
-	//TODO : Determine termination condition
-	timer := time.NewTicker(time.Second * 30)
+	//TODO : Determine termination condition (time and number of acks ?)
+	timer := time.NewTicker(time.Second * 15)
 	for {
 		select {
 		case ack := <-channel:
@@ -223,9 +225,6 @@ func (g *Gossiper) UploadFileToCloud(filename string, blockchain *Blockchain) (*
 			}
 			g.data.addChunkLocation(metaHashStr, filename, ack.UploadedChunks, localFile.ChunkCount, ack.Origin)
 			if g.data.remoteFileIsMatch(metaHashStr) {
-				if !foundFullMatch {
-					println("FILE CORRECTLY UPLOADED")
-				}
 				foundFullMatch = true
 			}
 		case <-timer.C:
@@ -233,6 +232,8 @@ func (g *Gossiper) UploadFileToCloud(filename string, blockchain *Blockchain) (*
 			close(channel)
 			if !foundFullMatch {
 				return nil, errors.New("the file could not be entirely uploaded among other peers, try again")
+			} else {
+				fmt.Println("FILE CORRECTLY UPLOADED TO CLOUD")
 			}
 			return fileInfo, nil
 		}

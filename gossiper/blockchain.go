@@ -206,7 +206,7 @@ func (bc *Blockchain) AddBlock(block common.Block, minedLocally bool) bool {
 			}
 			return true
 		})
-		fmt.Println(out)
+		//fmt.Println(out)
 	}
 
 	// Check if it creates a longer chain
@@ -258,7 +258,7 @@ func (bc *Blockchain) AddBlock(block common.Block, minedLocally bool) bool {
 
 		// Remove invalid transactions
 		removeInvalidTransaction()
-		fmt.Printf("FORK-LONGER rewind %d blocks\n", rewindedBlock)
+		//fmt.Printf("FORK-LONGER rewind %d blocks\n", rewindedBlock)
 		printChain(&block)
 	} else {
 		createsFork := false
@@ -270,7 +270,7 @@ func (bc *Blockchain) AddBlock(block common.Block, minedLocally bool) bool {
 		})
 		bc.storeNewBlock(block)
 		if createsFork {
-			fmt.Printf("FORK-SHORTER %s\n", hex.EncodeToString(block.PrevHash[:]))
+			//fmt.Printf("FORK-SHORTER %s\n", hex.EncodeToString(block.PrevHash[:]))
 		}
 	}
 
@@ -366,9 +366,9 @@ func (bc *Blockchain) startMining(minedBlocks chan<- common.Block) {
 						<-timer.C
 					}
 					minedBlocks <- block
-					hash := block.Hash()
+					//hash := block.Hash()
 					lastFoundBlockTime = time.Now()
-					fmt.Printf("FOUND-BLOCK %s\n", hex.EncodeToString(hash[:]))
+					//fmt.Printf("FOUND-BLOCK %s\n", hex.EncodeToString(hash[:]))
 				}
 			}
 		}
