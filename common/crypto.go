@@ -80,16 +80,15 @@ func DecryptChunk(ciphertext []byte, key [32]byte) ([]byte, error) {
 
 func (rm *RumorMessage) Sign(key *rsa.PrivateKey) {
 	hash := rm.Hash()
-	log.Printf("Sign, Origin: %s, ID: %d, Signature: %s", rm.Origin, rm.ID, hex.EncodeToString(rm.Signature[:]))
 	signature, _ := rsa.SignPSS(rand.Reader, key, crypto.SHA256, hash[:], nil)
 	_ = copy(rm.Signature[:], signature)
 }
 
 func (rm *RumorMessage) VerifySignature(key *rsa.PublicKey) bool {
 	hash := rm.Hash()
-	log.Printf("VerifySignature, Origin: %s, ID: %d, Signature: %s", rm.Origin, rm.ID, hex.EncodeToString(rm.Signature[:]))
 	err := rsa.VerifyPSS(key, crypto.SHA256, hash[:], rm.Signature[:], nil)
 	if err != nil {
+		log.Printf("VerifySignature, Origin: %s, ID: %d, Signature: %s", rm.Origin, rm.ID, hex.EncodeToString(rm.Signature[:]))
 		debug.PrintStack()
 	}
 	return err == nil
