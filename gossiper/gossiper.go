@@ -25,6 +25,7 @@ const DataReplyTimeOut = 5 * time.Second
 const AntiEntropyPeriod int = 5 // TODO changed
 const DownloadFolder = "_Downloads"
 const MaxChunkDownloadRetryLimit = 10
+const NumberOfChunksBeforeACK = 10
 
 type Gossiper struct {
 	clientAddress     *net.UDPAddr
@@ -525,28 +526,20 @@ func (g *Gossiper) StartGossiper() {
 							fmt.Printf("Could not download chunk %d : %s\n", i, err.Error())
 						} else {
 							downloadedChunks = append(downloadedChunks, uint64(i))
+							if len(downloadedChunks) >= NumberOfChunksBeforeACK {
+								err := g.sendUploadFileACK(dest, downloadedChunks, metaHash, message.Nonce)
+								if err != nil {
+									fmt.Println("Could not send upload ack : " + err.Error())
+								}
+								downloadedChunks = make([]uint64, 0)
+							}
 						}
 					}
-					ack := common.FileUploadAck{
-						Origin:         g.name,
-						Destination:    dest,
-						UploadedChunks: downloadedChunks,
-						MetaHash:       metaHash,
-					}
-					chunksHash, err := g.data.HashChunksOfLocalFile(metaHash[:], downloadedChunks, sha256.New())
+					err := g.sendUploadFileACK(dest, downloadedChunks, metaHash, message.Nonce)
 					if err != nil {
-						fmt.Printf("Could not hash chunks: %s\n", err.Error())
-						return
+						fmt.Println("Could not send upload ack : " + err.Error())
 					}
-					ack.Sign(g.keychain.AsymmetricPrivKey, message.Nonce, chunksHash)
-					hop, exist := g.routingTable.getNextHop(dest)
-					if exist {
-						if err := common.SendMessage(hop, &common.GossipPacket{FileUploadAck: &ack}, g.gossipConn); err != nil {
-							fmt.Println("Could not ack FileUploadMessage : " + err.Error())
-							return
-						}
-					}
-					if len(downloadedChunks)+len(message.UploadedChunks) < len(metaFile)/sha256.Size {
+					/*if len(downloadedChunks)+len(message.UploadedChunks) < len(metaFile)/sha256.Size {
 						message.HopLimit = message.HopLimit - 1
 						if message.HopLimit < 1 {
 							return
@@ -561,7 +554,7 @@ func (g *Gossiper) StartGossiper() {
 								return
 							}
 						}
-					}
+					}*/
 				} else if request := gossipPacket.UploadedFileRequest; request != nil {
 					println("RECEIVED UPLOADEDFILEREQUEST")
 					nonce, dest, metaHash := request.Nonce, request.Origin, request.MetaHash
@@ -606,6 +599,27 @@ func (g *Gossiper) StartGossiper() {
 			}()
 		}
 	}()
+}
+
+func (g *Gossiper) sendUploadFileACK(dest string, downloadedChunks []uint64, metaHash [32]byte, nonce [32]byte) error {
+	ack := common.FileUploadAck{
+		Origin:         g.name,
+		Destination:    dest,
+		UploadedChunks: downloadedChunks,
+		MetaHash:       metaHash,
+	}
+	chunksHash, err := g.data.HashChunksOfLocalFile(metaHash[:], downloadedChunks, sha256.New())
+	if err != nil {
+		return errors.New("Could not hash chunks: " + err.Error())
+	}
+	ack.Sign(g.keychain.AsymmetricPrivKey, nonce, chunksHash)
+	hop, exist := g.routingTable.getNextHop(dest)
+	if exist {
+		if err := common.SendMessage(hop, &common.GossipPacket{FileUploadAck: &ack}, g.gossipConn); err != nil {
+			return errors.New("Could not ack FileUploadMessage : " + err.Error())
+		}
+	}
+	return nil
 }
 
 func (g *Gossiper) getOwnedChunks(metaFile []byte) []uint64 {
