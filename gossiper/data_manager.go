@@ -159,6 +159,8 @@ func (dm *DataManager) removeLocalFile(metafileHash string) error {
 		_ = os.Remove(filepath.Join(DataCacheFolder, chunkHex))
 	}
 
+	_ = os.Remove(filepath.Join(DataCacheFolder, metafileHash))
+
 	dm.localFiles.Delete(metafileHash)
 
 	return nil

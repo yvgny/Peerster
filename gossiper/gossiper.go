@@ -118,6 +118,20 @@ func NewGossiper(clientAddress, gossipAddress, name, peers string, simpleBroadca
 		blockchain:        NewBlockchain(),
 	}
 
+	// TODO remove after
+
+	localFile, err := dataManager.addLocalFile(filepath.Join(common.SharedFilesFolder, "doc.pdf"), nil)
+	if err != nil {
+		return nil, err
+	}
+	fmt.Printf("metahash = %s\n", localFile.MetaHash)
+	err = dataManager.removeLocalFile(localFile.MetaHash)
+	if err != nil {
+		return nil, err
+	}
+	return nil, errors.New("forced stop")
+	// TODO REMOVE AFTER
+
 	ks, err := common.LoadKeyStorageFromDisk()
 	isRestarting := err == nil // Whether the peer was stopped and restarted
 	if !isRestarting {
