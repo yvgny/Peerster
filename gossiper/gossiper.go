@@ -480,7 +480,6 @@ func (g *Gossiper) StartGossiper() {
 						common.BroadcastMessage(g.peers.Elements(), gossipPacket, &addrStr, g.gossipConn)
 					}
 				} else if gossipPacket.BlockPublish != nil {
-					fmt.Printf("Received block from %s with transaction len = %d\n", addr.String(), len(gossipPacket.BlockPublish.Block.Transactions))
 					valid := g.blockchain.AddBlock(gossipPacket.BlockPublish.Block, false)
 					gossipPacket.BlockPublish.HopLimit--
 					if valid && gossipPacket.BlockPublish.HopLimit > 0 {

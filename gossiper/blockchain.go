@@ -206,7 +206,7 @@ func (bc *Blockchain) AddBlock(block common.Block, minedLocally bool) bool {
 			}
 			return true
 		})
-		fmt.Println(out)
+		//fmt.Println(out)
 	}
 
 	// Check if it creates a longer chain
