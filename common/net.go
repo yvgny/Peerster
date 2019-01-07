@@ -136,9 +136,9 @@ type GossipPacket struct {
 // Packet exchanged with the client
 type ClientPacket struct {
 	GossipPacket
-	FileIndex           *FileIndexPacket
-	FileDownload        *FileDownloadPacket
-	CloudPacket    *CloudPacket
+	FileIndex    *FileIndexPacket
+	FileDownload *FileDownloadPacket
+	CloudPacket  *CloudPacket
 }
 
 type Signature []byte
@@ -191,7 +191,7 @@ type UploadedFileReply struct {
 	Destination string
 	OwnedChunks []uint64
 	HopLimit    uint32
-	MetaHash 	[32]byte
+	MetaHash    [32]byte
 	Signature   Signature
 }
 
@@ -264,6 +264,15 @@ func (t *TxPublish) Clone() *TxPublish {
 		clone.Mapping = t.Mapping.Clone()
 	}
 	return clone
+}
+
+func (rm *RumorMessage) Clone() *RumorMessage {
+	return &RumorMessage{
+		Origin:    rm.Origin,
+		Text:      rm.Text,
+		ID:        rm.ID,
+		Signature: *rm.Signature.Clone(),
+	}
 }
 
 func (rm *RumorMessage) Hash() (out [32]byte) {
