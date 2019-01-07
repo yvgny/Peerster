@@ -208,8 +208,8 @@ func (g *Gossiper) UploadFileToCloud(filename string, blockchain *Blockchain) (*
 	g.waitCloudStorage.Store(metaHashStr, channel)
 	foundFullMatch := false
 	//TODO : Determine termination condition (time and number of acks ?)
-	timer := time.NewTicker(time.Second * 15)
 	for {
+		timer := time.NewTicker(time.Second * 15)
 		select {
 		case ack := <-channel:
 			pubKey, found := blockchain.getPubKey(ack.Origin)
