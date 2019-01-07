@@ -206,7 +206,7 @@ func (bc *Blockchain) AddBlock(block common.Block, minedLocally bool) bool {
 			}
 			return true
 		})
-		//fmt.Println(out)
+		// fmt.Println(out)
 	}
 
 	// Check if it creates a longer chain
@@ -337,7 +337,7 @@ func (bc *Blockchain) getPubKey (name string) (*rsa.PublicKey, bool) {
 func (bc *Blockchain) startMining(minedBlocks chan<- common.Block) {
 	go func() {
 		computingFirstBlock := true
-		lastFoundBlockTime := time.Now()
+		//lastFoundBlockTime := time.Now()
 		bc.Lock()
 		block := common.Block{
 			Transactions: bc.getTransactions(),
@@ -356,18 +356,19 @@ func (bc *Blockchain) startMining(minedBlocks chan<- common.Block) {
 			default:
 				rand.Read(block.Nonce[:])
 				if powIsCorrect(&block) && bc.AddBlock(block, true) {
+					// DISABLE WAIT
 					if computingFirstBlock {
 						computingFirstBlock = false
 						timer := time.NewTimer(common.FirstBlockPublicationDelay)
 						<-timer.C
-					} else {
+					} /* else {
 						elapsedTime := time.Now().Sub(lastFoundBlockTime)
 						timer := time.NewTimer(elapsedTime * 2)
 						<-timer.C
-					}
+					}*/
 					minedBlocks <- block
 					//hash := block.Hash()
-					lastFoundBlockTime = time.Now()
+					//lastFoundBlockTime = time.Now()
 					//fmt.Printf("FOUND-BLOCK %s\n", hex.EncodeToString(hash[:]))
 				}
 			}
