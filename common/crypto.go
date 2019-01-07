@@ -80,15 +80,15 @@ func DecryptChunk(ciphertext []byte, key [32]byte) ([]byte, error) {
 
 func (rm *RumorMessage) Sign(key *rsa.PrivateKey) {
 	hash := rm.Hash()
-	log.Printf("Sign, Origin: %s, ID: %d, Signature: %s", rm.Origin, rm.ID, hex.EncodeToString(rm.Signature))
+	log.Printf("Sign, Origin: %s, ID: %d, Signature: %s", rm.Origin, rm.ID, hex.EncodeToString(rm.Signature[:]))
 	signature, _ := rsa.SignPSS(rand.Reader, key, crypto.SHA256, hash[:], nil)
-	rm.Signature = signature
+	_ = copy(rm.Signature[:], signature)
 }
 
 func (rm *RumorMessage) VerifySignature(key *rsa.PublicKey) bool {
 	hash := rm.Hash()
-	log.Printf("VerifySignature, Origin: %s, ID: %d, Signature: %s", rm.Origin, rm.ID, hex.EncodeToString(rm.Signature))
-	err := rsa.VerifyPSS(key, crypto.SHA256, hash[:], rm.Signature, nil)
+	log.Printf("VerifySignature, Origin: %s, ID: %d, Signature: %s", rm.Origin, rm.ID, hex.EncodeToString(rm.Signature[:]))
+	err := rsa.VerifyPSS(key, crypto.SHA256, hash[:], rm.Signature[:], nil)
 	if err != nil {
 		debug.PrintStack()
 	}
@@ -98,19 +98,19 @@ func (rm *RumorMessage) VerifySignature(key *rsa.PublicKey) bool {
 func (pm *PrivateMessage) Sign(key *rsa.PrivateKey) {
 	hash := pm.Hash()
 	signature, _ := rsa.SignPSS(rand.Reader, key, crypto.SHA256, hash[:], nil)
-	pm.Signature = signature
+	_ = copy(pm.Signature[:], signature)
 }
 
 func (pm *PrivateMessage) VerifySignature(key *rsa.PublicKey) bool {
 	hash := pm.Hash()
-	err := rsa.VerifyPSS(key, crypto.SHA256, hash[:], pm.Signature, nil)
+	err := rsa.VerifyPSS(key, crypto.SHA256, hash[:], pm.Signature[:], nil)
 	return err == nil
 }
 
 func (id *IdentityPKeyMapping) Sign(key *rsa.PrivateKey) {
 	hash := id.Hash()
 	signature, _ := rsa.SignPSS(rand.Reader, key, crypto.SHA256, hash[:], nil)
-	id.Signature = signature
+	copy(id.Signature[:], signature)
 }
 
 func (id *IdentityPKeyMapping) VerifySignature() bool {
@@ -119,7 +119,7 @@ func (id *IdentityPKeyMapping) VerifySignature() bool {
 	if err != nil {
 		return false
 	}
-	err = rsa.VerifyPSS(key, crypto.SHA256, hash[:], id.Signature, nil)
+	err = rsa.VerifyPSS(key, crypto.SHA256, hash[:], id.Signature[:], nil)
 	return err == nil
 }
 
@@ -127,26 +127,28 @@ func (id *IdentityPKeyMapping) VerifySignature() bool {
 // hash of the concatenation of the chunks selected in UploadedChunks
 func (fua *FileUploadAck) Sign(key *rsa.PrivateKey, nonce [32]byte, chunksHash []byte) {
 	hash := fua.Hash(chunksHash, nonce)
-	fua.Signature, _ = rsa.SignPSS(rand.Reader, key, crypto.SHA256, hash[:], nil)
+	signSlice, _ := rsa.SignPSS(rand.Reader, key, crypto.SHA256, hash[:], nil)
+	copy(fua.Signature[:], signSlice)
 }
 
 // The nonce from FileUploadMessage should be given. chunksHash is the
 // hash of the concatenation of the chunks selected in UploadedChunks
 func (fua *FileUploadAck) VerifySignature(key *rsa.PublicKey, nonce [32]byte, chunksHash []byte) bool {
 	hash := fua.Hash(chunksHash, nonce)
-	err := rsa.VerifyPSS(key, crypto.SHA256, hash[:], fua.Signature, nil)
+	err := rsa.VerifyPSS(key, crypto.SHA256, hash[:], fua.Signature[:], nil)
 	return err == nil
 }
 
 // The nonce from UploadedFileRequest should be given
 func (ufr *UploadedFileReply) Sign(key *rsa.PrivateKey, nonce [32]byte) {
 	hash := ufr.Hash(nonce)
-	ufr.Signature, _ = rsa.SignPSS(rand.Reader, key, crypto.SHA256, hash[:], nil)
+	signSlice, _ := rsa.SignPSS(rand.Reader, key, crypto.SHA256, hash[:], nil)
+	copy(ufr.Signature[:], signSlice)
 }
 
 // The nonce from UploadedFileRequest should be given
 func (ufr *UploadedFileReply) VerifySignature(key *rsa.PublicKey, nonce [32]byte) bool {
 	hash := ufr.Hash(nonce)
-	err := rsa.VerifyPSS(key, crypto.SHA256, hash[:], ufr.Signature, nil)
+	err := rsa.VerifyPSS(key, crypto.SHA256, hash[:], ufr.Signature[:], nil)
 	return err == nil
 }

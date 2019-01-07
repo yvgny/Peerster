@@ -772,7 +772,7 @@ func (g *Gossiper) downloadFile(user string, hash []byte, filename string, key *
 								//TODO : Verify fix is correct
 								if err != nil {
 									fmt.Println(errors.New("skipping chunk: cannot download chunk: " + err.Error()))
-									break loop
+										break loop
 								}
 							}
 							_, err = f.Write(toFile)

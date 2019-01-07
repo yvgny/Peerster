@@ -141,7 +141,7 @@ type ClientPacket struct {
 	CloudPacket  *CloudPacket
 }
 
-type Signature []byte
+type Signature [256]byte
 
 type IdentityPKeyMapping struct {
 	Identity  string
@@ -219,7 +219,7 @@ func (t *TxPublish) Hash() (out [32]byte) {
 	if t.Mapping != nil {
 		h.Write([]byte(t.Mapping.Identity))
 		h.Write(t.Mapping.PublicKey)
-		h.Write(t.Mapping.Signature)
+		h.Write(t.Mapping.Signature[:])
 	}
 	copy(out[:], h.Sum(nil))
 	return
@@ -232,15 +232,15 @@ func (f *File) Clone() *File {
 	return clone
 }
 
-func (s *Signature) Clone() *Signature {
-	var clone Signature
-	clone = make([]byte, len(*s))
-	copy(clone, *s)
-	return &clone
-}
+//func (s *Signature) Clone() *Signature {
+//	var clone Signature
+//	clone = make([]byte, len(*s))
+//	copy(clone, *s)
+//	return &clone
+//}
 
 func (id *IdentityPKeyMapping) Clone() *IdentityPKeyMapping {
-	clone := &IdentityPKeyMapping{Identity: id.Identity, Signature: *id.Signature.Clone()}
+	clone := &IdentityPKeyMapping{Identity: id.Identity, Signature: id.Signature}
 	clone.PublicKey = make([]byte, len(id.PublicKey))
 	copy(clone.PublicKey, id.PublicKey)
 	return clone
@@ -271,7 +271,7 @@ func (rm *RumorMessage) Clone() *RumorMessage {
 		Origin:    rm.Origin,
 		Text:      rm.Text,
 		ID:        rm.ID,
-		Signature: *rm.Signature.Clone(),
+		Signature: rm.Signature,
 	}
 }
 
