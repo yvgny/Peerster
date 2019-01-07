@@ -1136,14 +1136,15 @@ func (g *Gossiper) sendStatusPacket(peer string) error {
 }
 
 func (g *Gossiper) storeMessage(message *common.RumorMessage) {
-	g.messages.Store(generateRumorUniqueString(nil, message.Origin, message.ID), *message)
+	clone := message.Clone()
+	g.messages.Store(generateRumorUniqueString(nil, message.Origin, message.ID), *clone)
 }
 
 func (g *Gossiper) getMessage(origin string, id uint32) (*common.RumorMessage, bool) {
 	val, ok := g.messages.Load(generateRumorUniqueString(nil, origin, id))
 	if ok {
 		msg := val.(common.RumorMessage)
-		return &msg, ok
+		return msg.Clone(), ok
 	}
 
 	return nil, ok
