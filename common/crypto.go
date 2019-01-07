@@ -9,6 +9,9 @@ import (
 	"crypto/sha256"
 	"crypto/x509"
 	"encoding/base64"
+	"encoding/hex"
+	"log"
+	"runtime/debug"
 )
 
 // Returns the base64-encoded version of the encrypted string
@@ -77,13 +80,18 @@ func DecryptChunk(ciphertext []byte, key [32]byte) ([]byte, error) {
 
 func (rm *RumorMessage) Sign(key *rsa.PrivateKey) {
 	hash := rm.Hash()
+	log.Printf("Sign, Origin: %s, ID: %d, Signature: %s", rm.Origin, rm.ID, hex.EncodeToString(rm.Signature))
 	signature, _ := rsa.SignPSS(rand.Reader, key, crypto.SHA256, hash[:], nil)
 	rm.Signature = signature
 }
 
 func (rm *RumorMessage) VerifySignature(key *rsa.PublicKey) bool {
 	hash := rm.Hash()
+	log.Printf("VerifySignature, Origin: %s, ID: %d, Signature: %s", rm.Origin, rm.ID, hex.EncodeToString(rm.Signature))
 	err := rsa.VerifyPSS(key, crypto.SHA256, hash[:], rm.Signature, nil)
+	if err != nil {
+		debug.PrintStack()
+	}
 	return err == nil
 }
 
