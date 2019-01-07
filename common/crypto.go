@@ -9,7 +9,6 @@ import (
 	"crypto/sha256"
 	"crypto/x509"
 	"encoding/base64"
-	"fmt"
 )
 
 // Returns the base64-encoded version of the encrypted string
@@ -85,9 +84,6 @@ func (rm *RumorMessage) Sign(key *rsa.PrivateKey) {
 func (rm *RumorMessage) VerifySignature(key *rsa.PublicKey) bool {
 	hash := rm.Hash()
 	err := rsa.VerifyPSS(key, crypto.SHA256, hash[:], rm.Signature, nil)
-	if err != nil {
-		fmt.Printf("Message \"%s\" from %s is not valid\n", rm.Text, rm.Origin)
-	}
 	return err == nil
 }
 
