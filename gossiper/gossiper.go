@@ -22,7 +22,7 @@ const DefaultHopLimit uint32 = 10
 const DefaultUdpBufferSize int = 12228
 const DefaultChunkSize int = 8192
 const DataReplyTimeOut = 5 * time.Second
-const AntiEntropyPeriod int = 1
+const AntiEntropyPeriod int = 5 // TODO changed
 const DownloadFolder = "_Downloads"
 const MaxChunkDownloadRetryLimit = 10
 
