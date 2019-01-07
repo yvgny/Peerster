@@ -176,10 +176,10 @@ func (bc *Blockchain) AddBlock(block common.Block, minedLocally bool) bool {
 	printChain := func(lastBlock *common.Block) {
 		out := "CHAIN"
 		forEachBlockInFork(lastBlock, func(node *common.Block) bool {
-			out += " "
-			hash := node.Hash()
-			prevHash := node.PrevHash
-			out += fmt.Sprintf("%s:%s:", hex.EncodeToString(hash[:]), hex.EncodeToString(prevHash[:]))
+			// out += " "
+			// hash := node.Hash()
+			// prevHash := node.PrevHash
+			// out += fmt.Sprintf("%s:%s:", hex.EncodeToString(hash[:]), hex.EncodeToString(prevHash[:]))
 			if len(node.Transactions) > 0 {
 				filenamesList := make([]string, 0)
 				originsList := make([]string, 0)
@@ -206,7 +206,7 @@ func (bc *Blockchain) AddBlock(block common.Block, minedLocally bool) bool {
 			}
 			return true
 		})
-		// fmt.Println(out)
+		fmt.Println(out)
 	}
 
 	// Check if it creates a longer chain
