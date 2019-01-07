@@ -1154,12 +1154,12 @@ func (g *Gossiper) getMessage(origin string, id uint32) (*common.RumorMessage, b
 // is not known
 func (g *Gossiper) isNewValidMessage(message *common.RumorMessage) bool {
 	val, _ := g.clocks.LoadOrStore(message.Origin, uint32(1))
-	pubKey, found := g.blockchain.getPubKey(message.Origin)
-	if !found {
-		return false
-	}
+	//pubKey, found := g.blockchain.getPubKey(message.Origin)
+	//if !found {
+	//	return false
+	//}
 
-	return message.VerifySignature(pubKey) && message.ID == val.(uint32)
+	return /*message.VerifySignature(pubKey) &&*/ message.ID == val.(uint32)
 }
 
 func (g *Gossiper) peersString() string {
