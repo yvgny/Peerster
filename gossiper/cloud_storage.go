@@ -206,7 +206,6 @@ func (g *Gossiper) UploadFileToCloud(filename string, blockchain *Blockchain) (*
 	}
 	channel := make(chan *common.FileUploadAck)
 	g.waitCloudStorage.Store(metaHashStr, channel)
-	foundFullMatch := false
 	//TODO : Determine termination condition (time and number of acks ?)
 	for {
 		timer := time.NewTicker(time.Second * 15)
@@ -224,18 +223,16 @@ func (g *Gossiper) UploadFileToCloud(filename string, blockchain *Blockchain) (*
 				continue
 			}
 			g.data.addChunkLocation(metaHashStr, filename, ack.UploadedChunks, localFile.ChunkCount, ack.Origin)
-			if g.data.remoteFileIsMatch(metaHashStr) {
-				foundFullMatch = true
+			if g.data.numberOfMatch(metaHashStr) > 1 {
+				fmt.Println("FILE CORRECTLY UPLOADED TO CLOUD")
+				g.waitCloudStorage.Delete(metaHashStr)
+				close(channel)
+				return fileInfo, nil
 			}
 		case <-timer.C:
 			g.waitCloudStorage.Delete(metaHashStr)
 			close(channel)
-			if !foundFullMatch {
-				return nil, errors.New("the file could not be entirely uploaded among other peers, try again")
-			} else {
-				fmt.Println("FILE CORRECTLY UPLOADED TO CLOUD")
-			}
-			return fileInfo, nil
+			return nil, errors.New("the file could not be entirely uploaded among other peers, try again")
 		}
 	}
 }

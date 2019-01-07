@@ -9,6 +9,7 @@ import (
 	"hash"
 	"io"
 	"io/ioutil"
+	"math"
 	"math/rand"
 	"os"
 	"path"
@@ -112,14 +113,30 @@ func (dm *DataManager) getAllRemoteMatches() map[string]string {
 }
 
 func (dm *DataManager) remoteFileIsMatch(metafileHash string) bool {
+	return dm.numberOfMatch(metafileHash) > 0
+}
+
+func (dm *DataManager) numberOfMatch(metafileHash string) uint {
 	dm.RLock()
 	defer dm.RUnlock()
-
 	remoteFile, ok := dm.remoteFiles[metafileHash]
 	if !ok {
-		return false
+		return 0
 	}
-	return remoteFile.ChunkCount == uint64(len(remoteFile.ChunkLocations))
+
+	if remoteFile.ChunkCount != uint64(len(remoteFile.ChunkLocations)) {
+		return 0
+	}
+
+	var min uint = math.MaxInt32
+	for _, locations := range remoteFile.ChunkLocations {
+		length := uint(len(locations))
+		if length < min {
+			min = length
+		}
+	}
+
+	return min
 }
 
 func (dm *DataManager) removeLocalFile(metafileHash string) error {
