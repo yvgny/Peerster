@@ -10,7 +10,6 @@ import (
 	"io"
 	"io/ioutil"
 	"math"
-	"math/rand"
 	"os"
 	"path"
 	"path/filepath"
@@ -79,7 +78,7 @@ func (dm *DataManager) addChunkLocation(metafileHash, filename string, chunkNumb
 	}
 }
 
-func (dm *DataManager) getRandomChunkLocation(metafileHash string, chunkNumber uint64) (string, bool) {
+func (dm *DataManager) getChunkLocation(metafileHash string, chunkNumber uint64) (string, bool) {
 	dm.RLock()
 	defer dm.RUnlock()
 
@@ -93,7 +92,44 @@ func (dm *DataManager) getRandomChunkLocation(metafileHash string, chunkNumber u
 		return "", false
 	}
 
-	return list[rand.Intn(len(list))], true
+	if len(list) == 0 {
+		return "", false
+	}
+
+	return list[0], true
+}
+
+func (dm *DataManager) getChunkLocationsCount(metafileHash string, chunkNumber uint64) (int, bool) {
+	dm.RLock()
+	defer dm.RUnlock()
+
+	remoteFile, ok := dm.remoteFiles[metafileHash]
+	if !ok {
+		return 0, false
+	}
+
+	list, ok := remoteFile.ChunkLocations[chunkNumber]
+	if !ok {
+		return 0, false
+	}
+
+	return len(list), true
+}
+
+func (dm *DataManager) rotateChunkLocationsWithFirstPeer(peer string) {
+	dm.Lock()
+	defer dm.Unlock()
+
+	for _, remoteFile := range dm.remoteFiles {
+		for key, list := range remoteFile.ChunkLocations {
+			if len(list) == 0 {
+				continue
+			} else if list[0] == peer {
+				newList := append(list, list[0])
+				remoteFile.ChunkLocations[key] = newList[1:]
+			}
+		}
+	}
 }
 
 // return every matched file, mapping the filename to their metafile hash

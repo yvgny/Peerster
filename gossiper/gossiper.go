@@ -24,7 +24,7 @@ const DefaultChunkSize int = 8192
 const DataReplyTimeOut = 5 * time.Second
 const AntiEntropyPeriod int = 5 // TODO changed
 const DownloadFolder = "_Downloads"
-const MaxChunkDownloadRetryLimit = 10
+const MaxChunkDownloadRetryLimit = 3
 const NumberOfChunksBeforeACK = 10
 
 type Gossiper struct {
@@ -510,7 +510,7 @@ func (g *Gossiper) StartGossiper() {
 						return
 					}
 					downloadedChunks := make([]uint64, 0)
-					for i := 1; i < len(message.MetaFile) / sha256.Size + 1; i++ {
+					for i := 1; i < len(message.MetaFile)/sha256.Size+1; i++ {
 						for _, chunk := range message.UploadedChunks {
 							if chunk == uint64(i) {
 								continue
@@ -624,7 +624,7 @@ func (g *Gossiper) sendUploadFileACK(dest string, downloadedChunks []uint64, met
 
 func (g *Gossiper) getOwnedChunks(metaFile []byte) []uint64 {
 	chunkMap := make([]uint64, 0)
-	for i := 1; i < len(metaFile)/sha256.Size + 1; i++ {
+	for i := 1; i < len(metaFile)/sha256.Size+1; i++ {
 		_, err := g.data.getLocalData(metaFile[(i-1)*sha256.Size : i*sha256.Size])
 		if err == nil {
 			chunkMap = append(chunkMap, uint64(i))
@@ -690,7 +690,7 @@ func (g *Gossiper) downloadFile(user string, hash []byte, filename string, key *
 			address, valid := g.routingTable.getNextHop(user)
 			return user, address, valid
 		}
-		host, ok := g.data.getRandomChunkLocation(metafileHash, chunkNbc)
+		host, ok := g.data.getChunkLocation(metafileHash, chunkNbc)
 		if !ok {
 			return "", "", false
 		}
@@ -710,8 +710,13 @@ func (g *Gossiper) downloadFile(user string, hash []byte, filename string, key *
 		replyChan := make(chan *common.DataReply)
 		g.waitData.Store(metafileHash, &replyChan)
 		fmt.Printf("DOWNLOADING metafile of %s from %s\n", filename, user)
+		locationsCount, valid := g.data.getChunkLocationsCount(metafileHash, 1)
+		if !valid {
+			fmt.Printf("cannot download chunk %d of file %s: no peer to download from", 1, metafileHash)
+			return
+		}
 		// retry every period to get the meta file
-		for try := 0; try < MaxChunkDownloadRetryLimit; try++ {
+		for try := 0; try < 2*locationsCount; try++ {
 			metafilePeer, metafileNextHop, ok := getNextHop(1)
 			if !ok {
 				fmt.Println("cannot find next hop for metafile (using hop of chunk 0)")
@@ -752,16 +757,21 @@ func (g *Gossiper) downloadFile(user string, hash []byte, filename string, key *
 					packet.DataRequest.HashValue = metafile[i : i+sha256.Size]
 					chunckHex := hex.EncodeToString(packet.DataRequest.HashValue)
 					g.waitData.Store(chunckHex, &replyChan)
-					peer, nextHop, ok := getNextHop(chunkNr)
-					fmt.Printf("DOWNLOADING %s chunk %d from %s\n", filename, (i/sha256.Size)+1, peer)
-					if !ok {
-						fmt.Printf("cannot find next hop for chunk %d\n", i)
+					locationsCount, valid = g.data.getChunkLocationsCount(metafileHash, chunkNr)
+					if !valid {
+						fmt.Printf("cannot download chunk %d of file %s: no peer to download from", chunkNr, metafileHash)
 						continue
 					}
-					packet.DataRequest.Destination = peer
 					// retry every period until chunk is downloaded
-				loop:
-					for try1 := 0; try1 < MaxChunkDownloadRetryLimit; try1++ {
+				retryLoop:
+					for try1 := 0; try1 < 2*locationsCount; try1++ {
+						peer, nextHop, ok := getNextHop(chunkNr)
+						fmt.Printf("DOWNLOADING %s chunk %d from %s\n", filename, (i/sha256.Size)+1, peer)
+						if !ok {
+							fmt.Printf("cannot find next hop for chunk %d\n", i)
+							continue retryLoop
+						}
+						packet.DataRequest.Destination = peer
 						err = common.SendMessage(nextHop, &packet, g.gossipConn)
 						if err != nil {
 							fmt.Println(err.Error())
@@ -773,12 +783,12 @@ func (g *Gossiper) downloadFile(user string, hash []byte, filename string, key *
 							g.waitData.Delete(chunckHex)
 							if hex.EncodeToString(chunck.HashValue) != chunckHex {
 								fmt.Println(errors.New("skipping chunk: cannot download chunk: hash mismatch"))
-								break loop
+								break retryLoop
 							}
 							err = g.data.addLocalData(chunck.Data, chunck.HashValue)
 							if err != nil {
 								fmt.Println(errors.New("skipping chunk: cannot download chunk: " + err.Error()))
-								break loop
+								break retryLoop
 							}
 							toFile := chunck.Data
 							if key != nil {
@@ -786,7 +796,7 @@ func (g *Gossiper) downloadFile(user string, hash []byte, filename string, key *
 								//TODO : Verify fix is correct
 								if err != nil {
 									fmt.Println(errors.New("skipping chunk: cannot download chunk: " + err.Error()))
-										break loop
+									break retryLoop
 								}
 							}
 							_, err = f.Write(toFile)
@@ -794,8 +804,9 @@ func (g *Gossiper) downloadFile(user string, hash []byte, filename string, key *
 								fmt.Println(errors.New("Unable to write in file: " + err.Error()))
 							}
 							chunkList = append(chunkList, chunkNr)
-							break loop
+							break retryLoop
 						case <-timer.C:
+							g.data.rotateChunkLocationsWithFirstPeer(peer)
 						}
 
 					}
@@ -810,6 +821,7 @@ func (g *Gossiper) downloadFile(user string, hash []byte, filename string, key *
 
 				return
 			case <-timer.C:
+				g.data.rotateChunkLocationsWithFirstPeer(metafilePeer)
 			}
 		}
 
