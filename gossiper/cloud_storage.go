@@ -139,7 +139,6 @@ func (g *Gossiper) DownloadFileFromCloud(filename string, blockchain *Blockchain
 		timer := time.NewTimer(common.CloudSearchTimeout)
 		select {
 		case reply := <-channel:
-			println("RECEIVED SOMETHING ON MY CHANNEL !!!")
 			pubkey, found := blockchain.getPubKey(reply.Origin)
 			if !found {
 				fmt.Println("The peer " + reply.Origin + " has not yet claimed a public-key")
@@ -161,13 +160,12 @@ func (g *Gossiper) DownloadFileFromCloud(filename string, blockchain *Blockchain
 			}
 		case <-timer.C:
 			g.waitCloudRequest.Delete(fileInfo)
-			return errors.New("could not download file: peer replies timeout")
+			return errors.New("peer replies timeout while trying to download a file from the cloud")
 		}
 	}
 }
 
 func (g *Gossiper) UploadFileToCloud(filename string, blockchain *Blockchain) (*LocalFile, error) {
-	//TODO Choose right path for files to upload
 	fileInfo, err := g.data.addLocalFile(filepath.Join(common.CloudFilesUploadFolder, filename), &g.keychain.SymmetricKey)
 	if err != nil {
 		return nil, err
@@ -207,7 +205,6 @@ func (g *Gossiper) UploadFileToCloud(filename string, blockchain *Blockchain) (*
 	}
 	channel := make(chan *common.FileUploadAck)
 	g.waitCloudStorage.Store(metaHashStr, channel)
-	//TODO : Determine termination condition (time and number of acks ?)
 	for {
 		timer := time.NewTicker(time.Second * 15)
 		select {
@@ -225,7 +222,7 @@ func (g *Gossiper) UploadFileToCloud(filename string, blockchain *Blockchain) (*
 			}
 			g.data.addChunkLocation(metaHashStr, filename, ack.UploadedChunks, localFile.ChunkCount, ack.Origin)
 			if g.data.numberOfMatch(metaHashStr) > 1 {
-				fmt.Println("FILE CORRECTLY UPLOADED TO CLOUD")
+				fmt.Println("FILE with METAHASH " + hex.EncodeToString(metaHash[:]) + " CORRECTLY UPLOADED TO CLOUD")
 				_ = g.data.removeLocalFile(metaHashStr)
 				g.waitCloudStorage.Delete(metaHashStr)
 				close(channel)
