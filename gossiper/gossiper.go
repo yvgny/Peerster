@@ -503,6 +503,11 @@ func (g *Gossiper) StartGossiper() {
 					}
 				} else if message := gossipPacket.FileUploadMessage; message != nil {
 					println("RECEIVED FILEUPLOADMESSAGE")
+					key, exist := g.blockchain.getPubKey(message.Origin)
+					if !exist || !message.VerifySignature(key, message.Nonce) {
+						return
+					}
+
 					metaHash, metaFile, dest := message.MetaHash, message.MetaFile, message.Origin
 					err = g.data.addLocalData(metaFile, metaHash[:])
 					if err != nil {
@@ -510,6 +515,7 @@ func (g *Gossiper) StartGossiper() {
 						return
 					}
 					downloadedChunks := make([]uint64, 0)
+					numberOfStoredChunks := 0
 					for i := 1; i < len(message.MetaFile)/sha256.Size+1; i++ {
 						for _, chunk := range message.UploadedChunks {
 							if chunk == uint64(i) {
@@ -531,6 +537,7 @@ func (g *Gossiper) StartGossiper() {
 								if err != nil {
 									fmt.Println("Could not send upload ack : " + err.Error())
 								}
+								numberOfStoredChunks += len(downloadedChunks)
 								downloadedChunks = make([]uint64, 0)
 							}
 						}
@@ -539,9 +546,9 @@ func (g *Gossiper) StartGossiper() {
 					if err != nil {
 						fmt.Println("Could not send upload ack : " + err.Error())
 					}
-					/*if len(downloadedChunks)+len(message.UploadedChunks) < len(metaFile)/sha256.Size {
-						message.HopLimit = message.HopLimit - 1
-						if message.HopLimit < 1 {
+
+					if numberOfStoredChunks + len(message.UploadedChunks) < len(metaFile) / sha256.Size {
+						if message.HopLimit = message.HopLimit - 1; message.HopLimit < 1 {
 							return
 						}
 						for _, chunk := range downloadedChunks {
@@ -549,14 +556,19 @@ func (g *Gossiper) StartGossiper() {
 						}
 						peer, exist := g.peers.PickN(1, []string{addr.String()})
 						if exist {
-							if err := common.SendMessage(peer[0], &common.GossipPacket{FileUploadAck: &ack}, g.gossipConn); err != nil {
+							if err := common.SendMessage(peer[0], &common.GossipPacket{FileUploadAck: ack}, g.gossipConn); err != nil {
 								fmt.Println("Could not forward FileUploadMessage : " + err.Error())
 								return
 							}
 						}
-					}*/
+					}
 				} else if request := gossipPacket.UploadedFileRequest; request != nil {
 					println("RECEIVED UPLOADEDFILEREQUEST")
+					key, exist := g.blockchain.getPubKey(request.Origin)
+					if !exist || !request.VerifySignature(key, request.Nonce) {
+						return
+					}
+
 					nonce, dest, metaHash := request.Nonce, request.Origin, request.MetaHash
 					//TODO Forward messages
 					metaFile, err := g.data.getLocalData(metaHash[:])

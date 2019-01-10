@@ -167,7 +167,7 @@ type FileUploadMessage struct {
 	HopLimit       uint32
 	UploadedChunks []uint64
 	Nonce          [32]byte
-	// TODO add signature ?
+	Signature		Signature
 }
 
 type FileUploadAck struct {
@@ -183,7 +183,7 @@ type UploadedFileRequest struct {
 	Origin   string
 	MetaHash [32]byte
 	Nonce    [32]byte
-	// TODO add signature ?
+	Signature Signature
 }
 
 type UploadedFileReply struct {
@@ -303,6 +303,20 @@ func (id *IdentityPKeyMapping) Hash() (out [32]byte) {
 }
 
 // The nonce from UploadedFileRequest should be given
+func (fum *FileUploadMessage) Hash(nonce [32]byte) (out [32]byte) {
+	h := sha256.New()
+	h.Write([]byte(fum.Origin))
+	h.Write(fum.MetaFile)
+	for _, chunk := range fum.UploadedChunks {
+		_ = binary.Write(h, binary.LittleEndian, chunk)
+	}
+	h.Write(fum.MetaHash[:])
+	h.Write(nonce[:])
+	copy(out[:], h.Sum(nil))
+	return
+}
+
+// The nonce from UploadedFileRequest should be given
 func (ufr *UploadedFileReply) Hash(nonce [32]byte) (out [32]byte) {
 	h := sha256.New()
 	h.Write([]byte(ufr.Origin))
@@ -323,6 +337,16 @@ func (fua *FileUploadAck) Hash(chunksHash []byte, nonce [32]byte) (out [32]byte)
 	h.Write([]byte(fua.Origin))
 	h.Write([]byte(fua.Destination))
 	h.Write(chunksHash)
+	h.Write(nonce[:])
+	copy(out[:], h.Sum(nil))
+	return
+}
+
+// The nonce from UploadedFileRequest should be given
+func (ufr *UploadedFileRequest) Hash(nonce [32]byte) (out [32]byte) {
+	h := sha256.New()
+	h.Write([]byte(ufr.Origin))
+	h.Write(ufr.MetaHash[:])
 	h.Write(nonce[:])
 	copy(out[:], h.Sum(nil))
 	return

@@ -124,14 +124,14 @@ func (g *Gossiper) DownloadFileFromCloud(filename string, blockchain *Blockchain
 		return err
 	}
 
-	request := common.GossipPacket{
-		UploadedFileRequest: &common.UploadedFileRequest{
-			Origin:   g.name,
-			Nonce:    nonce,
-			MetaHash: metaHash,
-		},
+	request := &common.UploadedFileRequest{
+		Origin:   g.name,
+		Nonce:    nonce,
+		MetaHash: metaHash,
 	}
-	common.BroadcastMessage(g.peers.Elements(), &request, nil, g.gossipConn)
+	request.Sign(g.keychain.AsymmetricPrivKey, request.Nonce)
+
+	common.BroadcastMessage(g.peers.Elements(), &common.GossipPacket{UploadedFileRequest:request}, nil, g.gossipConn)
 
 	channel := make(chan *common.UploadedFileReply)
 	g.waitCloudRequest.Store(fileInfo.MetaHash, channel)
@@ -190,11 +190,12 @@ func (g *Gossiper) UploadFileToCloud(filename string, blockchain *Blockchain) (*
 	message := common.FileUploadMessage{
 		Origin:         g.name,
 		UploadedChunks: []uint64{},
-		Nonce:          nonce,
+		Nonce:          generateNonce(),
 		MetaHash:       metaHash,
 		MetaFile:       metaFile,
 		HopLimit:       common.BlockBroadcastHopLimit,
 	}
+	message.Sign(g.keychain.AsymmetricPrivKey, message.Nonce)
 	gossipPacket := common.GossipPacket{
 		FileUploadMessage: &message,
 	}

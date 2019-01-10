@@ -122,6 +122,18 @@ func (id *IdentityPKeyMapping) VerifySignature() bool {
 	return err == nil
 }
 
+func (fum *FileUploadMessage) Sign(key *rsa.PrivateKey, nonce [32]byte) {
+	hash := fum.Hash(nonce)
+	signSlice, _ := rsa.SignPSS(rand.Reader, key, crypto.SHA256, hash[:], nil)
+	copy(fum.Signature[:], signSlice)
+}
+
+func (fum *FileUploadMessage) VerifySignature(key *rsa.PublicKey, nonce [32]byte) bool {
+	hash := fum.Hash(nonce)
+	err := rsa.VerifyPSS(key, crypto.SHA256, hash[:], fum.Signature[:], nil)
+	return err == nil
+}
+
 // The nonce from FileUploadMessage should be given. chunksHash is the
 // hash of the concatenation of the chunks selected in UploadedChunks
 func (fua *FileUploadAck) Sign(key *rsa.PrivateKey, nonce [32]byte, chunksHash []byte) {
@@ -135,6 +147,18 @@ func (fua *FileUploadAck) Sign(key *rsa.PrivateKey, nonce [32]byte, chunksHash [
 func (fua *FileUploadAck) VerifySignature(key *rsa.PublicKey, nonce [32]byte, chunksHash []byte) bool {
 	hash := fua.Hash(chunksHash, nonce)
 	err := rsa.VerifyPSS(key, crypto.SHA256, hash[:], fua.Signature[:], nil)
+	return err == nil
+}
+
+func (ufr *UploadedFileRequest) Sign(key *rsa.PrivateKey, nonce [32]byte) {
+	hash := ufr.Hash(nonce)
+	signSlice, _ := rsa.SignPSS(rand.Reader, key, crypto.SHA256, hash[:], nil)
+	copy(ufr.Signature[:], signSlice)
+}
+
+func (ufr *UploadedFileRequest) VerifySignature(key *rsa.PublicKey, nonce [32]byte) bool {
+	hash := ufr.Hash(nonce)
+	err := rsa.VerifyPSS(key, crypto.SHA256, hash[:], ufr.Signature[:], nil)
 	return err == nil
 }
 
