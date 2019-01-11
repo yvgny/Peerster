@@ -445,6 +445,7 @@ func (g *Gossiper) StartGossiper() {
 						}
 					}
 				} else if gossipPacket.DataReply != nil {
+					fmt.Printf("SKDEBUG received DataReplky from %s with hash %+v\n", gossipPacket.DataReply.Origin, gossipPacket.DataReply.HashValue)
 					if gossipPacket.DataReply.Destination == g.name {
 						hexHash := hex.EncodeToString(gossipPacket.DataReply.HashValue)
 						if chanRaw, ok := g.waitData.Load(hexHash); ok {
@@ -816,7 +817,6 @@ func (g *Gossiper) downloadFile(user string, hash []byte, filename string, key *
 						timer = time.NewTimer(DataReplyTimeOut)
 						select {
 						case chunck := <-replyChan:
-							g.waitData.Delete(chunckHex)
 							if hex.EncodeToString(chunck.HashValue) != chunckHex {
 								fmt.Println(errors.New("skipping peer: cannot download chunk: hash mismatch"))
 								g.data.rotateChunkLocationsWithFirstPeer(peer)
@@ -846,8 +846,10 @@ func (g *Gossiper) downloadFile(user string, hash []byte, filename string, key *
 								fmt.Println(errors.New("Unable to write in file: " + err.Error()))
 							}
 							chunkList = append(chunkList, chunkNr)
+							g.waitData.Delete(chunckHex)
 							break retryLoop
 						case <-timer.C:
+							fmt.Printf("Chunk %d from %s download timed out\n", chunkNr, peer)
 							g.data.rotateChunkLocationsWithFirstPeer(peer)
 						}
 
