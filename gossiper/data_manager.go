@@ -176,11 +176,13 @@ func (dm *DataManager) numberOfMatch(metafileHash string) uint {
 }
 
 func (dm *DataManager) removeLocalFile(metafileHash string) error {
-	hash, err := hex.DecodeString(metafileHash)
+	metahashSlice, err := hex.DecodeString(metafileHash)
 	if err != nil {
 		return err
 	}
-	metafile, err := dm.getLocalData(hash)
+	var metahash [32]byte
+	copy(metahash[:], metahashSlice)
+	metafile, err := dm.getLocalData(metahash)
 	if err != nil {
 		return err
 	}
@@ -263,9 +265,9 @@ func (dm *DataManager) addLocalFile(path string, key *[32]byte) (*LocalFile, err
 	return lf, nil
 }
 
-func (dm *DataManager) addLocalData(data, hash []byte) error {
-	hashBytes := sha256.Sum256(data)
-	hash1 := hex.EncodeToString(hash)
+func (dm *DataManager) addLocalData(data []byte, hash [32]byte) error {
+	hashBytes := sha256.Sum256(data[:])
+	hash1 := hex.EncodeToString(hash[:])
 	hash2 := hex.EncodeToString(hashBytes[:])
 
 	if hash1 != hash2 {
@@ -303,8 +305,8 @@ func (dm *DataManager) getLocalRecord(hash string) (*LocalFile, error) {
 	return &md, nil
 }
 
-func (dm *DataManager) getLocalData(hash []byte) ([]byte, error) {
-	hashStr := hex.EncodeToString(hash)
+func (dm *DataManager) getLocalData(hash [32]byte) ([]byte, error) {
+	hashStr := hex.EncodeToString(hash[:])
 	rawData, err := ioutil.ReadFile(filepath.Join(DataCacheFolder, hashStr))
 	if err != nil {
 		return nil, err
@@ -313,14 +315,15 @@ func (dm *DataManager) getLocalData(hash []byte) ([]byte, error) {
 	return rawData, nil
 }
 
-func (dm *DataManager) HashChunksOfLocalFile(metafileHash []byte, chunkMap []uint64, hashWriter hash.Hash) ([sha256.Size]byte, error) {
+func (dm *DataManager) HashChunksOfLocalFile(metafileHash [32]byte, chunkMap []uint64, hashWriter hash.Hash) ([sha256.Size]byte, error) {
 	metafile, err := dm.getLocalData(metafileHash)
 	var chunksHash [sha256.Size]byte
 	if err != nil {
 		return chunksHash, err
 	}
 	for _, chunkNum := range chunkMap {
-		currHash := metafile[(chunkNum-1)*sha256.Size : chunkNum*sha256.Size]
+		var currHash [32]byte
+		copy(currHash[:], metafile[(chunkNum-1)*sha256.Size : chunkNum*sha256.Size])
 		data, err := dm.getLocalData(currHash)
 		if err != nil {
 			return chunksHash, err

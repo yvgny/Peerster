@@ -150,7 +150,7 @@ func (g *Gossiper) DownloadFileFromCloud(filename string, blockchain *Blockchain
 			}
 			g.data.addChunkLocation(fileInfo.MetaHash, filename, reply.OwnedChunks, fileInfo.ChunkCount, reply.Origin)
 			if g.data.remoteFileIsMatch(fileInfo.MetaHash) {
-				err = g.downloadFile("", metaHash[:], filename, &g.keychain.SymmetricKey)
+				err = g.downloadFile("", metaHash, filename, &g.keychain.SymmetricKey)
 				if err != nil {
 					return errors.New("could not download file: " + err.Error())
 				}
@@ -172,13 +172,8 @@ func (g *Gossiper) UploadFileToCloud(filename string, blockchain *Blockchain) (*
 	}
 	metaHashStr := fileInfo.MetaHash
 	var metaHash [32]byte
-	metaHashSlice, err := hex.DecodeString(metaHashStr)
-	if err != nil {
-		return nil, err
-	}
-	copy(metaHash[:], metaHashSlice)
 
-	metaFile, err := g.data.getLocalData(metaHashSlice)
+	metaFile, err := g.data.getLocalData(metaHash)
 	if err != nil {
 		return nil, err
 	}
@@ -213,7 +208,7 @@ func (g *Gossiper) UploadFileToCloud(filename string, blockchain *Blockchain) (*
 			if !found {
 				continue
 			}
-			chunksHash, err := g.data.HashChunksOfLocalFile(metaHashSlice, ack.UploadedChunks, sha256.New())
+			chunksHash, err := g.data.HashChunksOfLocalFile(metaHash, ack.UploadedChunks, sha256.New())
 			if err != nil {
 				continue
 			}

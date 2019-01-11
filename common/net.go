@@ -49,7 +49,7 @@ type FileIndexPacket struct {
 
 type FileDownloadPacket struct {
 	User      string
-	HashValue []byte
+	HashValue [32]byte
 	Filename  string
 }
 
@@ -61,14 +61,14 @@ type DataRequest struct {
 	Origin      string
 	Destination string
 	HopLimit    uint32
-	HashValue   []byte
+	HashValue   [32]byte
 }
 
 type DataReply struct {
 	Origin      string
 	Destination string
 	HopLimit    uint32
-	HashValue   []byte
+	HashValue   [32]byte
 	Data        []byte
 }
 

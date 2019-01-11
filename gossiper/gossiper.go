@@ -435,7 +435,8 @@ func (g *Gossiper) StartGossiper() {
 					}
 				} else if gossipPacket.DataReply != nil {
 					if gossipPacket.DataReply.Destination == g.name {
-						hexHash := hex.EncodeToString(gossipPacket.DataReply.HashValue)
+						hashSlice := append([]byte(nil), gossipPacket.DataReply.HashValue[:]...)
+						hexHash := hex.EncodeToString(hashSlice)
 						if chanRaw, ok := g.waitData.Load(hexHash); ok {
 							channel := chanRaw.(*chan *common.DataReply)
 							*channel <- gossipPacket.DataReply
@@ -509,7 +510,7 @@ func (g *Gossiper) StartGossiper() {
 					}
 
 					metaHash, metaFile, dest := message.MetaHash, message.MetaFile, message.Origin
-					err = g.data.addLocalData(metaFile, metaHash[:])
+					err = g.data.addLocalData(metaFile, metaHash)
 					if err != nil {
 						fmt.Println("Could not add local data : " + err.Error())
 						return
@@ -518,7 +519,7 @@ func (g *Gossiper) StartGossiper() {
 					numberOfStoredChunks := 0
 					chunkCount := len(message.MetaFile) / sha256.Size
 					var sliceCopy [32]byte
-					metaFile, err = g.data.getLocalData(metaHash[:])
+					metaFile, err = g.data.getLocalData(metaHash)
 					if err != nil {
 						fmt.Println("unable to load metafile : " + err.Error())
 					}
@@ -578,7 +579,7 @@ func (g *Gossiper) StartGossiper() {
 
 					nonce, dest, metaHash := request.Nonce, request.Origin, request.MetaHash
 					//TODO Forward messages
-					metaFile, err := g.data.getLocalData(metaHash[:])
+					metaFile, err := g.data.getLocalData(metaHash)
 					if err != nil {
 						fmt.Println("Could not get local record : " + err.Error())
 						return //File does not exist locally
@@ -631,7 +632,7 @@ func (g *Gossiper) sendUploadFileACK(dest string, downloadedChunks []uint64, met
 		UploadedChunks: downloadedChunks,
 		MetaHash:       metaHash,
 	}
-	chunksHash, err := g.data.HashChunksOfLocalFile(metaHash[:], downloadedChunks, sha256.New())
+	chunksHash, err := g.data.HashChunksOfLocalFile(metaHash, downloadedChunks, sha256.New())
 	if err != nil {
 		return errors.New("Could not hash chunks: " + err.Error())
 	}
@@ -653,7 +654,9 @@ func (g *Gossiper) sendUploadFileACK(dest string, downloadedChunks []uint64, met
 func (g *Gossiper) getOwnedChunks(metaFile []byte) []uint64 {
 	chunkMap := make([]uint64, 0)
 	for i := 1; i < len(metaFile)/sha256.Size+1; i++ {
-		_, err := g.data.getLocalData(metaFile[(i-1)*sha256.Size : i*sha256.Size])
+		var hashSlice [32]byte
+		copy(hashSlice[:], metaFile[(i-1)*sha256.Size : i*sha256.Size])
+		_, err := g.data.getLocalData(hashSlice)
 		if err == nil {
 			chunkMap = append(chunkMap, uint64(i))
 		}
@@ -709,8 +712,8 @@ func (g *Gossiper) forwardPacket(packet *common.GossipPacket) error {
 	return nil
 }
 
-func (g *Gossiper) downloadFile(user string, hash []byte, filename string, key *[32]byte) error {
-	metafileHash := hex.EncodeToString(hash)
+func (g *Gossiper) downloadFile(user string, hash [32]byte, filename string, key *[32]byte) error {
+	metafileHash := hex.EncodeToString(hash[:])
 
 	// returns the the tuple (peer_name, next_hop, valid)
 	getNextHop := func(chunkNbc uint64) (string, string, bool) {
@@ -759,7 +762,8 @@ func (g *Gossiper) downloadFile(user string, hash []byte, filename string, key *
 			metafile := make([]byte, len(reply.Data))
 			copy(metafile, reply.Data)
 			g.waitData.Delete(metafileHash)
-			if hex.EncodeToString(reply.HashValue) != metafileHash {
+			hashSlice := append([]byte(nil), reply.HashValue[:]...)
+			if hex.EncodeToString(hashSlice) != metafileHash {
 				return errors.New("cannot download metafile : hash doesn't match with reply")
 			}
 			err = g.data.addLocalData(metafile, reply.HashValue)
@@ -776,8 +780,9 @@ func (g *Gossiper) downloadFile(user string, hash []byte, filename string, key *
 			// get every chunk
 			for i := 0; i < len(metafile); i += sha256.Size {
 				chunkNr := uint64(i/sha256.Size + 1)
-				packet.DataRequest.HashValue = metafile[i : i+sha256.Size]
-				chunckHex := hex.EncodeToString(packet.DataRequest.HashValue)
+				copy(packet.DataRequest.HashValue[:], metafile[i : i+sha256.Size])
+				hashSlice := append([]byte(nil), packet.DataRequest.HashValue[:]...)
+				chunckHex := hex.EncodeToString(hashSlice)
 				g.waitData.Store(chunckHex, &replyChan)
 				locationsCount, valid = g.data.getChunkLocationsCount(metafileHash, chunkNr)
 				if !valid {
@@ -803,7 +808,8 @@ func (g *Gossiper) downloadFile(user string, hash []byte, filename string, key *
 					timer = time.NewTimer(DataReplyTimeOut)
 					select {
 					case chunck := <-replyChan:
-						if hex.EncodeToString(chunck.HashValue) != chunckHex {
+						hashSlice := append([]byte(nil), chunck.HashValue[:]...)
+						if hex.EncodeToString(hashSlice) != chunckHex {
 							fmt.Println(errors.New("skipping peer: cannot download chunk: hash mismatch"))
 							g.data.rotateChunkLocationsWithFirstPeer(peer)
 							continue retryLoop
@@ -894,7 +900,7 @@ func (g *Gossiper) storeChunk(dest string, hash [32]byte, i int) error {
 		DataRequest: &common.DataRequest{
 			Origin:    g.name,
 			HopLimit:  DefaultHopLimit,
-			HashValue: append([]byte(nil), hash[:]...),
+			HashValue: hash,
 		},
 	}
 
@@ -920,7 +926,8 @@ func (g *Gossiper) storeChunk(dest string, hash [32]byte, i int) error {
 		case reply := <-replyChan:
 			data := make([]byte, len(reply.Data))
 			copy(data, reply.Data)
-			if hex.EncodeToString(reply.HashValue) != hashStr {
+			hashSlice := append([]byte(nil), reply.HashValue[:]...)
+			if hex.EncodeToString(hashSlice) != hashStr {
 				fmt.Println("cannot download chunk : hash doesn't match with reply")
 				continue
 			}
