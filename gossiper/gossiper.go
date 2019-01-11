@@ -527,6 +527,11 @@ func (g *Gossiper) StartGossiper() {
 					downloadedChunks := make([]uint64, 0)
 					numberOfStoredChunks := 0
 					chunkCount := len(message.MetaFile)/sha256.Size
+					var sliceCopy [32]byte
+					metaFile, err = g.data.getLocalData(metaHash[:])
+					if err != nil {
+						fmt.Println("unable to load metafile : " + err.Error())
+					}
 					for i := 1; i < chunkCount+1; i++ {
 						for _, chunk := range message.UploadedChunks {
 							if chunk == uint64(i) {
@@ -534,11 +539,8 @@ func (g *Gossiper) StartGossiper() {
 							}
 						}
 						// Without loading the metafile everytime, the metafile content is modified
-						metaFile, err = g.data.getLocalData(metaHash[:])
-						if err != nil {
-							fmt.Println("unable to load metafile : " + err.Error())
-						}
-						err := g.storeChunk(dest, metaFile[(i-1)*sha256.Size:i*sha256.Size], i)
+						copy(sliceCopy[:], metaFile[(i-1)*sha256.Size:i*sha256.Size])
+						err := g.storeChunk(dest, sliceCopy, i)
 						if err != nil {
 							fmt.Printf("Could not download chunk %d : %s\n", i, err.Error())
 						} else {
@@ -905,8 +907,8 @@ func (g *Gossiper) sendPrivateMessage(destination, text string) error {
 	return nil
 }
 
-func (g *Gossiper) storeChunk(dest string, hash []byte, i int) error {
-	hashStr := hex.EncodeToString(hash)
+func (g *Gossiper) storeChunk(dest string, hash [32]byte, i int) error {
+	hashStr := hex.EncodeToString(hash[:])
 
 	println("REQUESTING HASH : " + hashStr)
 
@@ -914,7 +916,7 @@ func (g *Gossiper) storeChunk(dest string, hash []byte, i int) error {
 		DataRequest: &common.DataRequest{
 			Origin:    g.name,
 			HopLimit:  DefaultHopLimit,
-			HashValue: hash,
+			HashValue: hash[:],
 		},
 	}
 
