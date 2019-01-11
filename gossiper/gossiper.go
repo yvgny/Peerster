@@ -934,7 +934,6 @@ func (g *Gossiper) storeChunk(dest string, hash [32]byte, i int) error {
 		case reply := <-replyChan:
 			data := make([]byte, len(reply.Data))
 			copy(data, reply.Data)
-			g.waitData.Delete(hashStr)
 			if hex.EncodeToString(reply.HashValue) != hashStr {
 				fmt.Println("cannot download chunk : hash doesn't match with reply")
 				continue
@@ -944,6 +943,7 @@ func (g *Gossiper) storeChunk(dest string, hash [32]byte, i int) error {
 				fmt.Println("cannot download chunk: " + err.Error())
 				continue
 			}
+			g.waitData.Delete(hashStr)
 			return nil
 		case <-timer.C:
 		}
