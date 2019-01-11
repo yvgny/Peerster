@@ -170,8 +170,12 @@ func (g *Gossiper) UploadFileToCloud(filename string, blockchain *Blockchain) (*
 	if err != nil {
 		return nil, err
 	}
-	metaHashStr := fileInfo.MetaHash
+	metahashSlice, err := hex.DecodeString(fileInfo.MetaHash)
+	if err != nil {
+		return nil, err
+	}
 	var metaHash [32]byte
+	copy(metaHash[:], metahashSlice)
 
 	metaFile, err := g.data.getLocalData(metaHash)
 	if err != nil {
@@ -194,12 +198,12 @@ func (g *Gossiper) UploadFileToCloud(filename string, blockchain *Blockchain) (*
 	}
 	common.BroadcastMessage(g.peers.Elements(), &gossipPacket, nil, g.gossipConn)
 
-	localFile, err := g.data.getLocalRecord(metaHashStr)
+	localFile, err := g.data.getLocalRecord(fileInfo.MetaHash)
 	if err != nil {
 		return nil, err
 	}
 	channel := make(chan *common.FileUploadAck)
-	g.waitCloudStorage.Store(metaHashStr, channel)
+	g.waitCloudStorage.Store(fileInfo.MetaHash, channel)
 	for {
 		timer := time.NewTicker(time.Second * 15)
 		select {
@@ -215,17 +219,17 @@ func (g *Gossiper) UploadFileToCloud(filename string, blockchain *Blockchain) (*
 			if !ack.VerifySignature(pubKey, nonce, chunksHash) {
 				continue
 			}
-			g.data.addChunkLocation(metaHashStr, filename, ack.UploadedChunks, localFile.ChunkCount, ack.Origin)
-			if g.data.numberOfMatch(metaHashStr) > 1 {
+			g.data.addChunkLocation(fileInfo.MetaHash, filename, ack.UploadedChunks, localFile.ChunkCount, ack.Origin)
+			if g.data.numberOfMatch(fileInfo.MetaHash) > 1 {
 				fmt.Println("FILE with METAHASH " + hex.EncodeToString(metaHash[:]) + " CORRECTLY UPLOADED TO CLOUD")
-				_ = g.data.removeLocalFile(metaHashStr)
-				g.waitCloudStorage.Delete(metaHashStr)
+				_ = g.data.removeLocalFile(fileInfo.MetaHash)
+				g.waitCloudStorage.Delete(fileInfo.MetaHash)
 				close(channel)
 				return fileInfo, nil
 			}
 		case <-timer.C:
-			_ = g.data.removeLocalFile(metaHashStr)
-			g.waitCloudStorage.Delete(metaHashStr)
+			_ = g.data.removeLocalFile(fileInfo.MetaHash)
+			g.waitCloudStorage.Delete(fileInfo.MetaHash)
 			close(channel)
 			return nil, errors.New("the file could not be entirely uploaded among other peers, try again")
 		}
