@@ -25,7 +25,7 @@ const DataReplyTimeOut = 5 * time.Second
 const AntiEntropyPeriod int = 5 // TODO changed
 const DownloadFolder = "_Downloads"
 const MaxChunkDownloadRetryLimit = 3
-const NumberOfChunksBeforeACK = 10
+const NumberOfChunksBeforeACK = 3
 
 type Gossiper struct {
 	clientAddress     *net.UDPAddr
@@ -636,6 +636,7 @@ func (g *Gossiper) sendUploadFileACK(dest string, downloadedChunks []uint64, met
 	ack.Sign(g.keychain.AsymmetricPrivKey, nonce, chunksHash)
 	hop, exist := g.routingTable.getNextHop(dest)
 	if exist {
+		fmt.Println("SENDING ACK for METAHASH " + hex.EncodeToString(metaHash[:]) + "\nOWNED CHUNKS")
 		if err := common.SendMessage(hop, &common.GossipPacket{FileUploadAck: &ack}, g.gossipConn); err != nil {
 			return errors.New("Could not ack FileUploadMessage : " + err.Error())
 		}
