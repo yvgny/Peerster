@@ -512,6 +512,7 @@ func (g *Gossiper) StartGossiper() {
 					fmt.Println("FILEUPLOADMESSAGE from origin " + message.Origin + " for METAHASH " + hex.EncodeToString(message.MetaHash[:]))
 					key, exist := g.blockchain.getPubKey(message.Origin)
 					if !exist || !message.VerifySignature(key, message.Nonce) {
+						fmt.Println("Could not verify signature, dropping this packet")
 						return
 					}
 
