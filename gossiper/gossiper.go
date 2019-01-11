@@ -814,7 +814,8 @@ func (g *Gossiper) downloadFile(user string, hash [32]byte, filename string, key
 							g.data.rotateChunkLocationsWithFirstPeer(peer)
 							continue retryLoop
 						}
-						err = g.data.addLocalData(chunck.Data, chunck.HashValue)
+						dataCopy := append([]byte(nil), chunck.Data...)
+						err = g.data.addLocalData(dataCopy, chunck.HashValue)
 						if err != nil {
 							fmt.Println(errors.New("skipping peer: cannot download chunk: " + err.Error()))
 							g.data.rotateChunkLocationsWithFirstPeer(peer)
@@ -929,7 +930,8 @@ func (g *Gossiper) storeChunk(dest string, hash [32]byte, i int) error {
 				fmt.Println("cannot download chunk : hash doesn't match with reply")
 				continue
 			}
-			err = g.data.addLocalData(data, reply.HashValue)
+			dataCopy := append([]byte(nil), data...)
+			err = g.data.addLocalData(dataCopy, reply.HashValue)
 			if err != nil {
 				fmt.Println("cannot download chunk: " + err.Error())
 				continue
