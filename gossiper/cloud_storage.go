@@ -229,6 +229,7 @@ func (g *Gossiper) UploadFileToCloud(filename string, blockchain *Blockchain) (*
 				return fileInfo, nil
 			}
 		case <-timer.C:
+			_ = g.data.removeLocalFile(metaHashStr)
 			g.waitCloudStorage.Delete(metaHashStr)
 			close(channel)
 			return nil, errors.New("the file could not be entirely uploaded among other peers, try again")
