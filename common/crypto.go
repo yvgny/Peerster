@@ -136,16 +136,16 @@ func (fum *FileUploadMessage) VerifySignature(key *rsa.PublicKey, nonce [32]byte
 
 // The nonce from FileUploadMessage should be given. chunksHash is the
 // hash of the concatenation of the chunks selected in UploadedChunks
-func (fua *FileUploadAck) Sign(key *rsa.PrivateKey, nonce [32]byte, chunksHash []byte) {
-	hash := fua.Hash(chunksHash, nonce)
+func (fua *FileUploadAck) Sign(key *rsa.PrivateKey, nonce [32]byte, chunksHash [sha256.Size]byte) {
+	hash := fua.Hash(chunksHash[:], nonce)
 	signSlice, _ := rsa.SignPSS(rand.Reader, key, crypto.SHA256, hash[:], nil)
 	copy(fua.Signature[:], signSlice)
 }
 
 // The nonce from FileUploadMessage should be given. chunksHash is the
 // hash of the concatenation of the chunks selected in UploadedChunks
-func (fua *FileUploadAck) VerifySignature(key *rsa.PublicKey, nonce [32]byte, chunksHash []byte) bool {
-	hash := fua.Hash(chunksHash, nonce)
+func (fua *FileUploadAck) VerifySignature(key *rsa.PublicKey, nonce [32]byte, chunksHash [sha256.Size]byte) bool {
+	hash := fua.Hash(chunksHash[:], nonce)
 	err := rsa.VerifyPSS(key, crypto.SHA256, hash[:], fua.Signature[:], nil)
 	return err == nil
 }

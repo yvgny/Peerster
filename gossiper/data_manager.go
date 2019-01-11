@@ -313,21 +313,23 @@ func (dm *DataManager) getLocalData(hash []byte) ([]byte, error) {
 	return rawData, nil
 }
 
-func (dm *DataManager) HashChunksOfLocalFile(metafileHash []byte, chunkMap []uint64, hashWriter hash.Hash) ([]byte, error) {
+func (dm *DataManager) HashChunksOfLocalFile(metafileHash []byte, chunkMap []uint64, hashWriter hash.Hash) ([sha256.Size]byte, error) {
 	metafile, err := dm.getLocalData(metafileHash)
+	var chunksHash [sha256.Size]byte
 	if err != nil {
-		return nil, err
+		return chunksHash, err
 	}
 	for _, chunkNum := range chunkMap {
 		currHash := metafile[(chunkNum-1)*sha256.Size : chunkNum*sha256.Size]
 		data, err := dm.getLocalData(currHash)
 		if err != nil {
-			return nil, err
+			return chunksHash, err
 		}
 		hashWriter.Write(data)
 	}
-
-	return hashWriter.Sum(nil), nil
+	sum := hashWriter.Sum(nil)
+	copy(chunksHash[:], sum)
+	return chunksHash, nil
 }
 
 func (dm *DataManager) SearchLocalFile(keywords []string) []*common.SearchResult {
