@@ -401,7 +401,6 @@ func (g *Gossiper) StartGossiper() {
 						}
 					}
 				} else if gossipPacket.DataRequest != nil {
-					println("RECEIVED DATAREQUEST from origin " + gossipPacket.DataRequest.Origin)
 					if gossipPacket.DataRequest.Destination == g.name {
 						data, err := g.data.getLocalData(gossipPacket.DataRequest.HashValue)
 						if err == nil {
@@ -426,13 +425,6 @@ func (g *Gossiper) StartGossiper() {
 								return
 							}
 
-						} else {
-							fmt.Println(errors.New("unable to load requested chunk:" + err.Error()))
-							print("SEARCHING FOR HASH : ")
-							println(hex.EncodeToString(gossipPacket.DataRequest.HashValue))
-							print("FROM USER ")
-							println(gossipPacket.DataRequest.Origin)
-							return
 						}
 					} else {
 						err = g.forwardPacket(gossipPacket)
@@ -447,6 +439,8 @@ func (g *Gossiper) StartGossiper() {
 						if chanRaw, ok := g.waitData.Load(hexHash); ok {
 							channel := chanRaw.(*chan *common.DataReply)
 							*channel <- gossipPacket.DataReply
+						} else {
+							fmt.Printf("SKDEBUG reply chan at hash %s not found\n", hexHash)
 						}
 					} else {
 						err = g.forwardPacket(gossipPacket)
@@ -938,6 +932,7 @@ func (g *Gossiper) storeChunk(dest string, hash [32]byte, i int) error {
 			g.waitData.Delete(hashStr)
 			return nil
 		case <-timer.C:
+			fmt.Printf("download chunk %d from %s timed out\n", i, dest)
 		}
 	}
 
