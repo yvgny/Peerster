@@ -894,8 +894,6 @@ func (g *Gossiper) sendPrivateMessage(destination, text string) error {
 func (g *Gossiper) storeChunk(dest string, hash [32]byte, i int) error {
 	hashStr := hex.EncodeToString(hash[:])
 
-	println("REQUESTING HASH : " + hashStr)
-
 	packet := common.GossipPacket{
 		DataRequest: &common.DataRequest{
 			Origin:    g.name,

@@ -238,13 +238,13 @@ func (g *Gossiper) UploadFileToCloud(filename string, blockchain *Blockchain) (*
 
 func (g *Gossiper) HandleClientCloudRequest(filename string, blockchain *Blockchain) error {
 	if exists := g.cloudStorage.Exists(filename); exists {
-		println("DOWNLOADING FILE FROM CLOUD")
+		println("DOWNLOADING FILE " + filename + " FROM CLOUD")
 		err := g.DownloadFileFromCloud(filename, blockchain)
 		if err != nil {
 			return errors.New(fmt.Sprintf("Cannot download file from cloud: %s\n", err.Error()))
 		}
 	} else {
-		println("UPLOADING FILE TO CLOUD")
+		println("UPLOADING FILE " + filename + " TO CLOUD")
 		hash, err := g.UploadFileToCloud(filename, blockchain)
 		if err != nil {
 			return errors.New(fmt.Sprintf("Cannot upload file to cloud: %s\n", err.Error()))
