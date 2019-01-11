@@ -188,7 +188,7 @@ func (g *Gossiper) UploadFileToCloud(filename string, blockchain *Blockchain) (*
 	message := common.FileUploadMessage{
 		Origin:         g.name,
 		UploadedChunks: []uint64{},
-		Nonce:          generateNonce(),
+		Nonce:          nonce,
 		MetaHash:       metaHash,
 		MetaFile:       metaFile,
 		HopLimit:       common.BlockBroadcastHopLimit,
