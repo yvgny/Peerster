@@ -520,7 +520,8 @@ func (g *Gossiper) StartGossiper() {
 					}
 					downloadedChunks := make([]uint64, 0)
 					numberOfStoredChunks := 0
-					for i := 1; i < len(message.MetaFile)/sha256.Size+1; i++ {
+					chunkCount := len(message.MetaFile)/sha256.Size
+					for i := 1; i < chunkCount+1; i++ {
 						for _, chunk := range message.UploadedChunks {
 							if chunk == uint64(i) {
 								continue
@@ -546,12 +547,14 @@ func (g *Gossiper) StartGossiper() {
 							}
 						}
 					}
-					err := g.sendUploadFileACK(dest, downloadedChunks, metaHash, message.Nonce)
-					if err != nil {
-						fmt.Println("Could not send upload ack : " + err.Error())
+					if chunkCount % NumberOfChunksBeforeACK != 0 {
+						err := g.sendUploadFileACK(dest, downloadedChunks, metaHash, message.Nonce)
+						if err != nil {
+							fmt.Println("Could not send upload ack : " + err.Error())
+						}
 					}
 
-					if numberOfStoredChunks + len(message.UploadedChunks) < len(metaFile) / sha256.Size {
+					if numberOfStoredChunks + len(message.UploadedChunks) < chunkCount {
 						if message.HopLimit = message.HopLimit - 1; message.HopLimit < 1 {
 							return
 						}
@@ -636,7 +639,11 @@ func (g *Gossiper) sendUploadFileACK(dest string, downloadedChunks []uint64, met
 	ack.Sign(g.keychain.AsymmetricPrivKey, nonce, chunksHash)
 	hop, exist := g.routingTable.getNextHop(dest)
 	if exist {
-		fmt.Println("SENDING ACK for METAHASH " + hex.EncodeToString(metaHash[:]) + "\nOWNED CHUNKS")
+		output := "SENDING ACK for METAHASH " + hex.EncodeToString(metaHash[:]) + "\nOWNED CHUNKS"
+		for _, chunk := range downloadedChunks {
+			output += " " + fmt.Sprint(chunk)
+		}
+		fmt.Println(output)
 		if err := common.SendMessage(hop, &common.GossipPacket{FileUploadAck: &ack}, g.gossipConn); err != nil {
 			return errors.New("Could not ack FileUploadMessage : " + err.Error())
 		}
