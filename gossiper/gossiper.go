@@ -894,7 +894,7 @@ func (g *Gossiper) storeChunk(dest string, hash [32]byte, i int) error {
 		DataRequest: &common.DataRequest{
 			Origin:    g.name,
 			HopLimit:  DefaultHopLimit,
-			HashValue: hash[:],
+			HashValue: append([]byte(nil), hash[:]...),
 		},
 	}
 
