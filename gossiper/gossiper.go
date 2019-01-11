@@ -805,28 +805,32 @@ func (g *Gossiper) downloadFile(user string, hash []byte, filename string, key *
 						err = common.SendMessage(nextHop, &packet, g.gossipConn)
 						if err != nil {
 							fmt.Println(err.Error())
-							return
+							g.data.rotateChunkLocationsWithFirstPeer(peer)
+							continue retryLoop
 						}
 						timer = time.NewTimer(DataReplyTimeOut)
 						select {
 						case chunck := <-replyChan:
 							g.waitData.Delete(chunckHex)
 							if hex.EncodeToString(chunck.HashValue) != chunckHex {
-								fmt.Println(errors.New("skipping chunk: cannot download chunk: hash mismatch"))
-								break retryLoop
+								fmt.Println(errors.New("skipping peer: cannot download chunk: hash mismatch"))
+								g.data.rotateChunkLocationsWithFirstPeer(peer)
+								continue retryLoop
 							}
 							err = g.data.addLocalData(chunck.Data, chunck.HashValue)
 							if err != nil {
-								fmt.Println(errors.New("skipping chunk: cannot download chunk: " + err.Error()))
-								break retryLoop
+								fmt.Println(errors.New("skipping peer: cannot download chunk: " + err.Error()))
+								g.data.rotateChunkLocationsWithFirstPeer(peer)
+								continue retryLoop
 							}
 							toFile := chunck.Data
 							if key != nil {
 								toFile, err = common.DecryptChunk(chunck.Data, *key)
 								//TODO : Verify fix is correct
 								if err != nil {
-									fmt.Println(errors.New("skipping chunk: cannot download chunk: " + err.Error()))
-									break retryLoop
+									fmt.Println(errors.New("skipping peer: cannot download chunk: " + err.Error()))
+									g.data.rotateChunkLocationsWithFirstPeer(peer)
+									continue retryLoop
 								}
 							}
 							_, err = f.Write(toFile)
