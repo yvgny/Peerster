@@ -419,6 +419,9 @@ func (g *Gossiper) StartGossiper() {
 								fmt.Println(errors.New("next hop for destination " + gossipPacket.DataRequest.Origin + " not known"))
 								return
 							}
+							verifHash := sha256.New()
+							verifHash.Write(reply.DataReply.Data)
+							fmt.Printf("SKDEBUG hash of sent chunk is %+v\n", verifHash.Sum(nil))
 							err = common.SendMessage(nexthop, &reply, g.gossipConn)
 							if err != nil {
 								fmt.Println(err.Error())
@@ -825,6 +828,9 @@ func (g *Gossiper) downloadFile(user string, hash []byte, filename string, key *
 							}
 							toFile := chunck.Data
 							if key != nil {
+								verifHash := sha256.New()
+								verifHash.Write(chunck.Data)
+								fmt.Printf("SKDEBUG hash of received chunk is %+v\n", verifHash.Sum(nil))
 								toFile, err = common.DecryptChunk(chunck.Data, *key)
 								//TODO : Verify fix is correct
 								if err != nil {
