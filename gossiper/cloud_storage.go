@@ -217,12 +217,10 @@ func (g *Gossiper) UploadFileToCloud(filename string, blockchain *Blockchain) (*
 			if err != nil {
 				continue
 			}
-			fmt.Printf("SKDEBUG ack is %+v", ack)
 			if !ack.VerifySignature(pubKey, nonce, chunksHash) {
 				continue
 			}
 			g.data.addChunkLocation(metaHashStr, filename, ack.UploadedChunks, localFile.ChunkCount, ack.Origin)
-			fmt.Printf("SKDEBUG number of match = %d for ack from %s\n", g.data.numberOfMatch(metaHashStr), ack.Origin)
 			if g.data.numberOfMatch(metaHashStr) > 1 {
 				fmt.Println("FILE with METAHASH " + hex.EncodeToString(metaHash[:]) + " CORRECTLY UPLOADED TO CLOUD")
 				_ = g.data.removeLocalFile(metaHashStr)

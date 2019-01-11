@@ -644,7 +644,6 @@ func (g *Gossiper) sendUploadFileACK(dest string, downloadedChunks []uint64, met
 			output += " " + fmt.Sprint(chunk)
 		}
 		fmt.Println(output)
-		fmt.Printf("SKDEBUG ack is %+v", ack)
 		if err := common.SendMessage(hop, &common.GossipPacket{FileUploadAck: &ack}, g.gossipConn); err != nil {
 			return errors.New("Could not ack FileUploadMessage : " + err.Error())
 		}
