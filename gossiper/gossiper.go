@@ -639,7 +639,7 @@ func (g *Gossiper) sendUploadFileACK(dest string, downloadedChunks []uint64, met
 	ack.Sign(g.keychain.AsymmetricPrivKey, nonce, chunksHash)
 	hop, exist := g.routingTable.getNextHop(dest)
 	if exist {
-		output := "SENDING ACK for METAHASH " + hex.EncodeToString(metaHash[:]) + "\nOWNED CHUNKS"
+		output := "SENDING ACK for METAHASH " + hex.EncodeToString(metaHash[:]) + "\nACKED CHUNKS"
 		for _, chunk := range downloadedChunks {
 			output += " " + fmt.Sprint(chunk)
 		}
@@ -892,6 +892,8 @@ func (g *Gossiper) sendPrivateMessage(destination, text string) error {
 
 func (g *Gossiper) storeChunk(dest string, hash []byte, i int) error {
 	hashStr := hex.EncodeToString(hash)
+
+	println("REQUESTING HASH : " + hashStr)
 
 	packet := common.GossipPacket{
 		DataRequest: &common.DataRequest{
