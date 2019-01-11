@@ -214,10 +214,10 @@ func (g *Gossiper) UploadFileToCloud(filename string, blockchain *Blockchain) (*
 				continue
 			}
 			chunksHash, err := g.data.HashChunksOfLocalFile(metaHashSlice, ack.UploadedChunks, sha256.New())
-			fmt.Printf("SKDEBUG hash of chunks %+v is %+v", ack.UploadedChunks, chunksHash)
 			if err != nil {
 				continue
 			}
+			fmt.Printf("SKDEBUG ack is %+v", ack)
 			if !ack.VerifySignature(pubKey, nonce, chunksHash) {
 				continue
 			}

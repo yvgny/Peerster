@@ -633,7 +633,6 @@ func (g *Gossiper) sendUploadFileACK(dest string, downloadedChunks []uint64, met
 		MetaHash:       metaHash,
 	}
 	chunksHash, err := g.data.HashChunksOfLocalFile(metaHash[:], downloadedChunks, sha256.New())
-	fmt.Printf("SKDEBUG hash of chunks %+v is %+v", downloadedChunks, chunksHash)
 	if err != nil {
 		return errors.New("Could not hash chunks: " + err.Error())
 	}
@@ -645,6 +644,7 @@ func (g *Gossiper) sendUploadFileACK(dest string, downloadedChunks []uint64, met
 			output += " " + fmt.Sprint(chunk)
 		}
 		fmt.Println(output)
+		fmt.Printf("SKDEBUG ack is %+v", ack)
 		if err := common.SendMessage(hop, &common.GossipPacket{FileUploadAck: &ack}, g.gossipConn); err != nil {
 			return errors.New("Could not ack FileUploadMessage : " + err.Error())
 		}
