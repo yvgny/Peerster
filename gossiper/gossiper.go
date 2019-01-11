@@ -553,6 +553,7 @@ func (g *Gossiper) StartGossiper() {
 							fmt.Println("Could not send upload ack : " + err.Error())
 						}
 					}
+					fmt.Println("FINISHED STORING for METAHASH " + hex.EncodeToString(metaHash[:]))
 
 					if numberOfStoredChunks + len(message.UploadedChunks) < chunkCount {
 						if message.HopLimit = message.HopLimit - 1; message.HopLimit < 1 {
