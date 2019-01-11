@@ -22,7 +22,7 @@ const DefaultHopLimit uint32 = 10
 const DefaultUdpBufferSize int = 12228
 const DefaultChunkSize int = 8192
 const DataReplyTimeOut = 5 * time.Second
-const AntiEntropyPeriod int = 5 // TODO changed
+const AntiEntropyPeriod int = 30 // TODO changed
 const DownloadFolder = "_Downloads"
 const MaxChunkDownloadRetryLimit = 3
 const NumberOfChunksBeforeACK = 3
@@ -401,6 +401,7 @@ func (g *Gossiper) StartGossiper() {
 						}
 					}
 				} else if gossipPacket.DataRequest != nil {
+					println("RECEIVED DATAREQUEST from origin " + gossipPacket.DataRequest.Origin)
 					if gossipPacket.DataRequest.Destination == g.name {
 						data, err := g.data.getLocalData(gossipPacket.DataRequest.HashValue)
 						if err == nil {
