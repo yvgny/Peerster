@@ -128,7 +128,7 @@ $(document).ready(function () {
         let filename = $('#cloud-files-filename').text();
         $.post(cloudFilesURL, {Filename: filename}, function () {
             $('#cloud-files-filename').text("Choose file");
-            showModalAlert("Your file has been correctly uploaded to the Cloud !");
+            showModalAlert("Your file has been correctly uploaded to the Cloud !", false);
             let $btn = $('#cloud-files-uploadButton');
             $btn.html($btn.data('original-text'));
             $btn.removeClass('disabled')
