@@ -105,8 +105,12 @@ $(document).ready(function () {
     $('#cloud-files-list').on('click', 'li', function (e) {
         e.preventDefault();
         let filename = $(this).text();
-        cloudDownload(filename)
-    })
+        let loadButton = $(this).children('.cloud-download-loading');
+        loadButton.show();
+        cloudDownload(filename).always(function () {
+            loadButton.hide();
+        })
+    });
 
     // Configure file indexing
     $('#index-file-form').submit(function (e) {
@@ -204,7 +208,7 @@ function downloadFile(filename, userID, fileID) {
 }
 
 function cloudDownload(filename) {
-    $.post(cloudFilesURL, {Filename: filename}, function () {
+    return $.post(cloudFilesURL, {Filename: filename}, function () {
         // Success
         showModalAlert("Your file has been correcly downloaded !", false)
     }).fail(function (xhr) {
@@ -264,7 +268,7 @@ function addNewCloudFileEntry(filename) {
     $('#cloud-files-info').hide();
     cloudFiles.add(filename);
     $('#cloud-files-list').append(`
-        <li class="list-group-item list-group-item-action">${filename}</li>
+        <li class="list-group-item list-group-item-action">${filename}<span class="fa fa-circle-o-notch fa-spin"></span></li>
     `)
 }
 
