@@ -51,13 +51,15 @@ func main() {
 		}
 	} else if fileRequestMsg {
 		hash, err := hex.DecodeString(*requestArg)
+		var hashArray [32]byte
+		copy(hashArray[:], hash)
 		if err != nil {
 			fmt.Println(err.Error())
 			os.Exit(1)
 		}
 		packet.FileDownload = &common.FileDownloadPacket{
 			User:      *destArg,
-			HashValue: hash,
+			HashValue: hashArray,
 			Filename:  *fileArg,
 		}
 	} else if fileSearch {

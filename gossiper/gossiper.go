@@ -115,7 +115,6 @@ func NewGossiper(clientAddress, gossipAddress, name, peers string, simpleBroadca
 		data:              dataManager,
 		routingTable:      NewRoutingTable(),
 		simple:            simpleBroadcastMode,
-		blockchain:        NewBlockchain(),
 	}
 
 	ks, err := common.LoadKeyStorageFromDisk()
@@ -137,6 +136,15 @@ func NewGossiper(clientAddress, gossipAddress, name, peers string, simpleBroadca
 	if err != nil {
 		cs = CreateNewCloudStorage()
 	}
+
+	var bc *Blockchain
+	bc, err = LoadBlockchainFromDisk()
+	if err != nil {
+		bc = NewBlockchain()
+	}
+
+	g.blockchain = bc
+
 	g.cloudStorage = cs
 
 	g.keychain = ks

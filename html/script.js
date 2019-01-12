@@ -268,7 +268,7 @@ function addNewCloudFileEntry(filename) {
     $('#cloud-files-info').hide();
     cloudFiles.add(filename);
     $('#cloud-files-list').append(`
-        <li class="list-group-item list-group-item-action">${filename}<span class="fa fa-circle-o-notch fa-spin"></span></li>
+        <li class="list-group-item list-group-item-action">${filename}<span class="fa fa-circle-o-notch fa-spin cloud-download-loading"></span></li>
     `)
 }
 

@@ -16,8 +16,8 @@ import (
 	"time"
 )
 
-var DiskStorageLocation = path.Join(common.HiddenStorageFolder, "cloud")
-var mappingsLoc = path.Join(DiskStorageLocation, "files.json")
+var DiskCloudStorageLocation = path.Join(common.HiddenStorageFolder, "cloud")
+var mappingsLoc = path.Join(DiskCloudStorageLocation, "files.json")
 
 type CloudStorage struct {
 	sync.RWMutex
@@ -88,8 +88,8 @@ func (cs *CloudStorage) AddMapping(filename string, hash *LocalFile) error {
 }
 
 func (cs *CloudStorage) saveCloudStorageOnDiskWithoutLock() error {
-	if _, err := os.Stat(DiskStorageLocation); os.IsNotExist(err) {
-		err = os.Mkdir(DiskStorageLocation, os.ModePerm)
+	if _, err := os.Stat(DiskCloudStorageLocation); os.IsNotExist(err) {
+		err = os.Mkdir(DiskCloudStorageLocation, os.ModePerm)
 		if err != nil {
 			return err
 		}
