@@ -7,6 +7,7 @@ let dest = "";
 let peers = new Set();
 let nodes = new Set();
 let contacts = new Set();
+let cloudFiles = new Set();
 let matchedFiles = {};
 let currentResults = [];
 let currentKeywordsFilter = () => false;
@@ -21,6 +22,7 @@ let indexFileURL = window.location.origin + "/index-file";
 let downloadFileURL = window.location.origin + "/download-file";
 let searchFileURL = window.location.origin + "/search-file";
 let matchedFilesURL = window.location.origin + "/matched-files";
+let cloudFilesURL = window.location.origin + "/cloud-file";
 let livePMupdates = false;
 
 // configure the DOM once it's fully loaded
@@ -35,6 +37,7 @@ $(document).ready(function () {
     pollNewNode();
     pollNewContacts();
     pollNewPrivateMessages();
+    pollNewCloudFiles();
 
     // Configure message form
     $("#new-message-form").submit(function (e) {
@@ -94,8 +97,19 @@ $(document).ready(function () {
     $('#file-search-result').on('click', 'li', function (e) {
         e.preventDefault();
         let filename = $(this).text();
-        let hash = matchedFiles[filename]
+        let hash = matchedFiles[filename];
         downloadFile(filename, "", hash)
+    });
+
+    // Configure cloud file list
+    $('#cloud-files-list').on('click', 'li', function (e) {
+        e.preventDefault();
+        let filename = $(this).text();
+        let loadButton = $(this).children('.cloud-download-loading');
+        loadButton.show();
+        cloudDownload(filename).always(function () {
+            loadButton.hide();
+        })
     });
 
     // Configure file indexing
@@ -112,11 +126,47 @@ $(document).ready(function () {
         })
     });
 
-    // Update file name in file chooser box
+    // Configure Cloud file upload
+    $('#cloud-files-form').submit(function (e) {
+        e.preventDefault();
+        let filename = $('#cloud-files-filename').text();
+        $.post(cloudFilesURL, {Filename: filename}, function () {
+            $('#cloud-files-filename').text("Choose file");
+            showModalAlert("Your file has been correctly uploaded to the Cloud !", false);
+            let $btn = $('#cloud-files-uploadButton');
+            $btn.html($btn.data('original-text'));
+            $btn.removeClass('disabled')
+        }).fail(function (xhr) {
+            showModalAlert(xhr.responseText, true);
+            let $btn = $('#cloud-files-uploadButton');
+            $btn.html($btn.data('original-text'));
+            $btn.removeClass('disabled')
+        })
+    });
+
+    // Change button when uploading
+    $('#cloud-files-uploadButton').on('click', function () {
+        let $this = $(this);
+        $this.addClass('disabled');
+        let loadingText = '<i class="fa fa-circle-o-notch fa-spin"></i> Uploading...';
+        if ($(this).html() !== loadingText) {
+            $this.data('original-text', $(this).html());
+            $this.html(loadingText);
+        }
+    });
+
+    // Update file name in file chooser box (File index)
     $('#customFile').on('change', function () {
         let fullpath = $('#customFile').val();
         let filename = fullpath.replace(/^.*[\\\/]/, '');
         $('#filename').text(filename)
+    });
+
+    // Update file name in file chooser box (Cloud)
+    $('#cloud-files-customFile').on('change', function () {
+        let fullpath = $('#cloud-files-customFile').val();
+        let filename = fullpath.replace(/^.*[\\\/]/, '');
+        $('#cloud-files-filename').text(filename)
     });
 
     // Configure file download box
@@ -154,6 +204,16 @@ function downloadFile(filename, userID, fileID) {
         showModalAlert("The file is being downloaded !", false)
     }).fail(function (xhr) {
         showModalAlert("Unable to start download: " + xhr.responseText, true)
+    })
+}
+
+function cloudDownload(filename) {
+    return $.post(cloudFilesURL, {Filename: filename}, function () {
+        // Success
+        showModalAlert("Your file has been correcly downloaded !", false)
+    }).fail(function (xhr) {
+        // Error
+        showModalAlert(xhr.responseText, true)
     })
 }
 
@@ -202,6 +262,26 @@ function pollNewMessages() {
         });
         setTimeout(pollNewMessages, PERIOD);
     });
+}
+
+function addNewCloudFileEntry(filename) {
+    $('#cloud-files-info').hide();
+    cloudFiles.add(filename);
+    $('#cloud-files-list').append(`
+        <li class="list-group-item list-group-item-action">${filename}<span class="fa fa-circle-o-notch fa-spin cloud-download-loading"></span></li>
+    `)
+}
+
+// poll for new file on the cloud
+function pollNewCloudFiles() {
+    $.getJSON(cloudFilesURL, function (data) {
+        for (let filename in data) {
+            if (data.hasOwnProperty(filename) && !cloudFiles.has(filename)) {
+                addNewCloudFileEntry(filename);
+            }
+        }
+        setTimeout(pollNewCloudFiles, PERIOD);
+    })
 }
 
 // poll for new private messages on the gossiper

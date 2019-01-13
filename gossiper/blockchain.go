@@ -2,12 +2,17 @@ package gossiper
 
 import (
 	"bytes"
+	"crypto/rsa"
 	"crypto/x509"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/yvgny/Peerster/common"
+	"io/ioutil"
 	"math/rand"
+	"os"
+	"path"
 	"strings"
 	"sync"
 	"time"
@@ -15,16 +20,25 @@ import (
 
 var GenesisBlockHash = [32]byte{}
 
+var DiskBlockchainStorageLocation = path.Join(common.HiddenStorageFolder, "blockchain")
+var keysLocation = path.Join(DiskBlockchainStorageLocation, "keys.json")
+
 type Blockchain struct {
 	sync.RWMutex
 	pendingTransactions   []common.TxPublish
 	blocks                sync.Map
 	longestChainLastBlock [32]byte
 	currentHeight         uint64
-	mappings              sync.Map
-	changesNotifier       chan Notification
-	pubKeyMapping         sync.Map
-	claimedPubkey		  common.ConcurrentSet
+	mappings              sync.Map // Origin -> *PublicKey
+
+	// As our blockchain cannot recover from a crash, we use a permanent mapping
+	// of keys stored on the disk. Each key that is used at least one time is
+	// stored in this map, this way it will be available again after a crash if
+	// needed
+	permanentMappings sync.Map //  Origin -> PublicKey
+	changesNotifier   chan Notification
+	pubKeyMapping     sync.Map
+	claimedPubkey     common.ConcurrentSet
 }
 
 type Notification struct{}
@@ -36,6 +50,57 @@ func NewBlockchain() *Blockchain {
 		changesNotifier:       make(chan Notification, 1),
 		claimedPubkey:         *common.NewConcurrentSet(),
 	}
+}
+
+func LoadBlockchainFromDisk() (*Blockchain, error) {
+	readBytes, err := ioutil.ReadFile(keysLocation)
+	if err != nil {
+		return nil, errors.New("cannot load Blockchain from disk: " + err.Error())
+	}
+	bc := make(map[string]rsa.PublicKey)
+	err = json.Unmarshal(readBytes, &bc)
+	if err != nil {
+		return nil, errors.New("cannot load Blockchain from disk: " + err.Error())
+	}
+
+	perm := sync.Map{}
+	for key, value := range bc {
+		perm.Store(key, value)
+	}
+
+	return &Blockchain{
+		pendingTransactions:   []common.TxPublish{},
+		longestChainLastBlock: GenesisBlockHash,
+		changesNotifier:       make(chan Notification, 1),
+		claimedPubkey:         *common.NewConcurrentSet(),
+		permanentMappings:     perm,
+	}, nil
+}
+
+func (bc *Blockchain) SaveBlockchainOnDisk() error {
+	if _, err := os.Stat(DiskBlockchainStorageLocation); os.IsNotExist(err) {
+		err = os.Mkdir(DiskBlockchainStorageLocation, os.ModePerm)
+		if err != nil {
+			return err
+		}
+	}
+
+	keys := make(map[string]rsa.PublicKey)
+	bc.permanentMappings.Range(func(originRaw, pubKeyRaw interface{}) bool {
+		keys[originRaw.(string)] = pubKeyRaw.(rsa.PublicKey)
+		return true
+	})
+	marhsalBytes, err := json.Marshal(keys)
+	if err != nil {
+		return errors.New("cannot marshal keys: " + err.Error())
+	}
+
+	err = ioutil.WriteFile(keysLocation, marhsalBytes, os.ModePerm)
+	if err != nil {
+		return errors.New("cannot store keys on disk: " + err.Error())
+	}
+
+	return nil
 }
 
 func (bc *Blockchain) storeNewBlock(block common.Block) {
@@ -90,7 +155,8 @@ func (bc *Blockchain) HandleTx(tx common.TxPublish) bool {
 
 func txClaimTheSame(txA common.TxPublish, txB common.TxPublish) bool {
 	return (txA.File != nil && txB.File != nil && txA.File.Name == txB.File.Name) ||
-		   (txA.Mapping != nil && txB.Mapping != nil && bytes.Equal(txA.Mapping.PublicKey, txB.Mapping.PublicKey))
+		(txA.Mapping != nil && txB.Mapping != nil && bytes.Equal(txA.Mapping.PublicKey, txB.Mapping.PublicKey)) ||
+		(txA.Mapping != nil && txB.Mapping != nil && txA.Mapping.Identity == txB.Mapping.Identity)
 }
 
 // return true if transaction has been added (= valid + not seen for the moment)
@@ -107,6 +173,8 @@ func (bc *Blockchain) handleTxWithoutLock(tx common.TxPublish) bool {
 	}
 	if tx.Mapping != nil {
 		alreadyClaimed = alreadyClaimed || bc.claimedPubkey.Exists(hex.EncodeToString(tx.Mapping.PublicKey))
+		_, found := bc.pubKeyMapping.Load(tx.Mapping.Identity)
+		alreadyClaimed = alreadyClaimed || found
 	}
 
 	if alreadyClaimed {
@@ -257,7 +325,7 @@ func (bc *Blockchain) AddBlock(block common.Block, minedLocally bool) bool {
 
 		// Remove invalid transactions
 		removeInvalidTransaction()
-		fmt.Printf("FORK-LONGER rewind %d blocks\n", rewindedBlock)
+		//fmt.Printf("FORK-LONGER rewind %d blocks\n", rewindedBlock)
 		printChain(&block)
 	} else {
 		createsFork := false
@@ -269,7 +337,7 @@ func (bc *Blockchain) AddBlock(block common.Block, minedLocally bool) bool {
 		})
 		bc.storeNewBlock(block)
 		if createsFork {
-			fmt.Printf("FORK-SHORTER %s\n", hex.EncodeToString(block.PrevHash[:]))
+			//fmt.Printf("FORK-SHORTER %s\n", hex.EncodeToString(block.PrevHash[:]))
 		}
 	}
 
@@ -279,7 +347,7 @@ func (bc *Blockchain) AddBlock(block common.Block, minedLocally bool) bool {
 
 // Add new mappings. Should be called when a write lock on the Blockchain is taken !
 func (bc *Blockchain) addNewMappings(txs []common.TxPublish) {
- 	for _, tx := range txs {
+	for _, tx := range txs {
 		if tx.File != nil {
 			bc.mappings.Store(tx.File.Name, hex.EncodeToString(tx.File.MetafileHash))
 		}
@@ -324,10 +392,32 @@ func (bc *Blockchain) getTransactions() []common.TxPublish {
 	return copied
 }
 
+func (bc *Blockchain) getPubKey(name string) (*rsa.PublicKey, bool) {
+	rsaPubkey, found := bc.pubKeyMapping.Load(name)
+	if !found {
+		rsaPubkey, found = bc.permanentMappings.Load(name)
+		if !found {
+			return nil, false
+		}
+		pk := rsaPubkey.(rsa.PublicKey)
+
+		return &pk, true
+	}
+
+	pk := rsaPubkey.(*rsa.PublicKey)
+
+	_, exists := bc.permanentMappings.LoadOrStore(name, *pk)
+	if !exists {
+		_ = bc.SaveBlockchainOnDisk()
+	}
+
+	return pk, true
+}
+
 func (bc *Blockchain) startMining(minedBlocks chan<- common.Block) {
 	go func() {
 		computingFirstBlock := true
-		lastFoundBlockTime := time.Now()
+		//lastFoundBlockTime := time.Now()
 		bc.Lock()
 		block := common.Block{
 			Transactions: bc.getTransactions(),
@@ -346,19 +436,20 @@ func (bc *Blockchain) startMining(minedBlocks chan<- common.Block) {
 			default:
 				rand.Read(block.Nonce[:])
 				if powIsCorrect(&block) && bc.AddBlock(block, true) {
+					// DISABLE WAIT
 					if computingFirstBlock {
 						computingFirstBlock = false
 						timer := time.NewTimer(common.FirstBlockPublicationDelay)
 						<-timer.C
-					} else {
+					} /* else {
 						elapsedTime := time.Now().Sub(lastFoundBlockTime)
 						timer := time.NewTimer(elapsedTime * 2)
 						<-timer.C
-					}
+					}*/
 					minedBlocks <- block
-					hash := block.Hash()
-					lastFoundBlockTime = time.Now()
-					fmt.Printf("FOUND-BLOCK %s\n", hex.EncodeToString(hash[:]))
+					//hash := block.Hash()
+					//lastFoundBlockTime = time.Now()
+					//fmt.Printf("FOUND-BLOCK %s\n", hex.EncodeToString(hash[:]))
 				}
 			}
 		}

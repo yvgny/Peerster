@@ -39,6 +39,8 @@ func NewWebServer(g *Gossiper) *WebServer {
 	r.HandleFunc("/private-message", g.getPrivateMessagesHandler).Methods("GET")
 	r.HandleFunc("/index-file", g.postFileToIndexHandler).Methods("POST")
 	r.HandleFunc("/download-file", g.postFileToDownload).Methods("POST")
+	r.HandleFunc("/cloud-file", g.postCloudFile).Methods("POST")
+	r.HandleFunc("/cloud-file", g.getCloudFilesHandler).Methods("GET")
 	r.HandleFunc("/search-file", g.postSearchForFile).Methods("POST")
 	r.HandleFunc("/matched-files", g.getMatchedFiles).Methods("GET")
 	r.HandleFunc("/node", g.getNodesHandler).Methods("GET")
@@ -76,6 +78,22 @@ func (g *Gossiper) idHandler(writer http.ResponseWriter, request *http.Request) 
 	marshal, err := json.Marshal(msg)
 	if err == nil {
 		_, err = writer.Write(marshal)
+		if err != nil {
+			writeErrorToHTTP(writer, err)
+			fmt.Println(err.Error())
+		}
+	} else {
+		writeErrorToHTTP(writer, err)
+		fmt.Println(err.Error())
+	}
+}
+
+func (g *Gossiper) getCloudFilesHandler(writer http.ResponseWriter, request *http.Request) {
+	writer.Header().Set("Content-Type", "application/json")
+
+	bytes, err := json.Marshal(g.cloudStorage.GetAllMappings())
+	if err == nil {
+		_, err = writer.Write(bytes)
 		if err != nil {
 			writeErrorToHTTP(writer, err)
 			fmt.Println(err.Error())
@@ -213,6 +231,20 @@ func (g *Gossiper) postPrivateMessageHandler(writer http.ResponseWriter, request
 	}
 }
 
+func (g *Gossiper) postCloudFile(writer http.ResponseWriter, request *http.Request) {
+	err := request.ParseForm()
+	if err != nil {
+		fmt.Println(err.Error())
+		writeErrorToHTTP(writer, err)
+	}
+	filename := request.Form.Get("Filename")
+	err = g.HandleClientCloudRequest(filename, g.blockchain)
+	if err != nil {
+		fmt.Println(err.Error())
+		writeErrorToHTTP(writer, err)
+	}
+}
+
 func (g *Gossiper) postFileToIndexHandler(writer http.ResponseWriter, request *http.Request) {
 	err := request.ParseForm()
 	if err != nil {
@@ -221,12 +253,12 @@ func (g *Gossiper) postFileToIndexHandler(writer http.ResponseWriter, request *h
 	}
 	filename := request.Form.Get("Filename")
 
-	hash, err := g.data.addLocalFile(filepath.Join(common.SharedFilesFolder, filename))
+	file, err := g.data.addLocalFile(filepath.Join(common.SharedFilesFolder, filename), nil)
 	if err != nil {
 		writeErrorToHTTP(writer, err)
 		fmt.Println(err.Error())
 	}
-	hexHash, _ := json.Marshal(hex.EncodeToString(hash))
+	hexHash, _ := json.Marshal(file.MetaHash)
 	_, err = writer.Write(hexHash)
 	if err != nil {
 		fmt.Println(err.Error())
@@ -249,7 +281,9 @@ func (g *Gossiper) postFileToDownload(writer http.ResponseWriter, request *http.
 		fmt.Println(err.Error())
 	}
 
-	err = g.downloadFile(user, hash, filename)
+	var hashArray [32]byte
+	copy(hashArray[:], hash)
+	err = g.downloadFile(user, hashArray, filename, nil)
 	if err != nil {
 		writeErrorToHTTP(writer, err)
 		fmt.Println(err.Error())
