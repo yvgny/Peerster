@@ -221,7 +221,7 @@ func (g *Gossiper) UploadFileToCloud(filename string, blockchain *Blockchain) (*
 			}
 			g.data.addChunkLocation(fileInfo.MetaHash, filename, ack.UploadedChunks, localFile.ChunkCount, ack.Origin)
 			if g.data.numberOfMatch(fileInfo.MetaHash) > 1 {
-				fmt.Println("FILE with METAHASH " + hex.EncodeToString(metaHash[:]) + " CORRECTLY UPLOADED TO CLOUD")
+				fmt.Println("CORRECTLY UPLOADED TO CLOUD FILE with METAHASH " + hex.EncodeToString(metaHash[:]))
 				_ = g.data.removeLocalFile(fileInfo.MetaHash)
 				g.waitCloudStorage.Delete(fileInfo.MetaHash)
 				close(channel)

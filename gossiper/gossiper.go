@@ -492,7 +492,7 @@ func (g *Gossiper) StartGossiper() {
 						common.BroadcastMessage(g.peers.Elements(), gossipPacket, &addrStr, g.gossipConn)
 					}
 				} else if ack := gossipPacket.FileUploadAck; ack != nil {
-					output := "FILEUPLOADACK from origin " + ack.Origin + " for METAHASH " + hex.EncodeToString(ack.MetaHash[:]) + "\nSTORED CHUKS"
+					output := "FILEUPLOADACK from origin " + ack.Origin + " for METAHASH " + hex.EncodeToString(ack.MetaHash[:]) + "\nACKED CHUNKS"
 					for _, chunk := range ack.UploadedChunks {
 						output += " " + fmt.Sprint(chunk)
 					}
