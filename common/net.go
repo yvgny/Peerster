@@ -232,13 +232,6 @@ func (f *File) Clone() *File {
 	return clone
 }
 
-//func (s *Signature) Clone() *Signature {
-//	var clone Signature
-//	clone = make([]byte, len(*s))
-//	copy(clone, *s)
-//	return &clone
-//}
-
 func (id *IdentityPKeyMapping) Clone() *IdentityPKeyMapping {
 	clone := &IdentityPKeyMapping{Identity: id.Identity, Signature: id.Signature}
 	clone.PublicKey = make([]byte, len(id.PublicKey))

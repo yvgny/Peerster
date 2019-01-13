@@ -42,6 +42,7 @@ type Gossiper struct {
 	waitData          *sync.Map
 	waitSearchRequest *common.ConcurrentSet
 	waitSearchReply   *sync.Map
+	knownCloudRequest *common.ConcurrentSet
 	messages          *sync.Map
 	privateMessages   *Mail
 	data              *DataManager
@@ -110,6 +111,7 @@ func NewGossiper(clientAddress, gossipAddress, name, peers string, simpleBroadca
 		waitData:          &sync.Map{},
 		waitSearchRequest: common.NewConcurrentSet(),
 		waitSearchReply:   &sync.Map{},
+		knownCloudRequest: common.NewConcurrentSet(),
 		messages:          &messagesMap,
 		privateMessages:   newMail(),
 		data:              dataManager,
@@ -584,6 +586,20 @@ func (g *Gossiper) StartGossiper() {
 						}
 					}
 				} else if request := gossipPacket.UploadedFileRequest; request != nil {
+					metahashSlice := make([]byte, len(gossipPacket.UploadedFileRequest.MetaHash))
+					metahashHex := hex.EncodeToString(metahashSlice)
+					if g.knownCloudRequest.Exists(metahashHex) {
+						return
+					} else {
+						g.knownCloudRequest.Store(metahashHex)
+						time.AfterFunc(common.CloudRequestDuplicateTimer, func() {
+							g.knownCloudRequest.Delete(metahashHex)
+						})
+						addrStr := addr.String()
+
+						// Ignore error (broadcast as much as possible)
+						_ = common.BroadcastMessage(g.peers.Elements(), gossipPacket, &addrStr, g.gossipConn)
+					}
 					fmt.Println("UPLOADEDFILEREQUEST from origin " + request.Origin + " for METAHASH " + hex.EncodeToString(request.MetaHash[:]))
 
 					key, exist := g.blockchain.getPubKey(request.Origin)
@@ -592,7 +608,6 @@ func (g *Gossiper) StartGossiper() {
 					}
 
 					nonce, dest, metaHash := request.Nonce, request.Origin, request.MetaHash
-					//TODO Forward messages
 					metaFile, err := g.data.getLocalData(metaHash)
 					if err != nil {
 						fmt.Println("Could not get local record : " + err.Error())
@@ -862,8 +877,8 @@ func (g *Gossiper) downloadFile(user string, hash [32]byte, filename string, key
 			_ = f.Sync()
 			_ = f.Close()
 
-			// TODO: change the size to the correct one
-			g.data.addLocalRecord(metafileHash, filename, chunkList, uint64(len(metafile)/sha256.Size), 0)
+			fileInfo, _ := f.Stat()
+			g.data.addLocalRecord(metafileHash, filename, chunkList, uint64(len(metafile)/sha256.Size), fileInfo.Size())
 			fmt.Printf("RECONSTRUCTED file %s\n", filename)
 
 			return nil
