@@ -531,7 +531,7 @@ func (g *Gossiper) StartGossiper() {
 					if err != nil {
 						fmt.Println("unable to load metafile : " + err.Error())
 					}
-					for i := 1; i < chunkCount+1; i++ {
+					for i := 1; i <= chunkCount; i++ {
 						for _, chunk := range message.UploadedChunks {
 							if chunk == uint64(i) {
 								continue
@@ -541,6 +541,12 @@ func (g *Gossiper) StartGossiper() {
 						copy(sliceCopy[:], metaFile[(i-1)*sha256.Size:i*sha256.Size])
 						err := g.storeChunk(dest, sliceCopy, i)
 						if err != nil {
+							if chunkCount == i && len(downloadedChunks) > 0 {
+								err := g.sendUploadFileACK(dest, downloadedChunks, metaHash, message.Nonce)
+								if err != nil {
+									fmt.Println("Could not send upload ack : " + err.Error())
+								}
+							}
 							fmt.Printf("Could not download chunk %d : %s\n", i, err.Error())
 						} else {
 							downloadedChunks = append(downloadedChunks, uint64(i))
