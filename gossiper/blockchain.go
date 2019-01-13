@@ -155,7 +155,8 @@ func (bc *Blockchain) HandleTx(tx common.TxPublish) bool {
 
 func txClaimTheSame(txA common.TxPublish, txB common.TxPublish) bool {
 	return (txA.File != nil && txB.File != nil && txA.File.Name == txB.File.Name) ||
-		(txA.Mapping != nil && txB.Mapping != nil && bytes.Equal(txA.Mapping.PublicKey, txB.Mapping.PublicKey))
+		(txA.Mapping != nil && txB.Mapping != nil && bytes.Equal(txA.Mapping.PublicKey, txB.Mapping.PublicKey)) ||
+		(txA.Mapping != nil && txB.Mapping != nil && txA.Mapping.Identity == txB.Mapping.Identity)
 }
 
 // return true if transaction has been added (= valid + not seen for the moment)
@@ -172,6 +173,8 @@ func (bc *Blockchain) handleTxWithoutLock(tx common.TxPublish) bool {
 	}
 	if tx.Mapping != nil {
 		alreadyClaimed = alreadyClaimed || bc.claimedPubkey.Exists(hex.EncodeToString(tx.Mapping.PublicKey))
+		_, found := bc.pubKeyMapping.Load(tx.Mapping.Identity)
+		alreadyClaimed = alreadyClaimed || found
 	}
 
 	if alreadyClaimed {
