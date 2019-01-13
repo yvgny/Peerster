@@ -167,7 +167,7 @@ type FileUploadMessage struct {
 	HopLimit       uint32
 	UploadedChunks []uint64
 	Nonce          [32]byte
-	Signature		Signature
+	Signature      Signature
 }
 
 type FileUploadAck struct {
@@ -180,9 +180,9 @@ type FileUploadAck struct {
 }
 
 type UploadedFileRequest struct {
-	Origin   string
-	MetaHash [32]byte
-	Nonce    [32]byte
+	Origin    string
+	MetaHash  [32]byte
+	Nonce     [32]byte
 	Signature Signature
 }
 

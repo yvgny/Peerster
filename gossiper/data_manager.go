@@ -323,7 +323,7 @@ func (dm *DataManager) HashChunksOfLocalFile(metafileHash [32]byte, chunkMap []u
 	}
 	for _, chunkNum := range chunkMap {
 		var currHash [32]byte
-		copy(currHash[:], metafile[(chunkNum-1)*sha256.Size : chunkNum*sha256.Size])
+		copy(currHash[:], metafile[(chunkNum-1)*sha256.Size:chunkNum*sha256.Size])
 		data, err := dm.getLocalData(currHash)
 		if err != nil {
 			return chunksHash, err

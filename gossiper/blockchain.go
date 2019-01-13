@@ -85,7 +85,7 @@ func (bc *Blockchain) SaveBlockchainOnDisk() error {
 		}
 	}
 
-	keys :=  make(map[string]rsa.PublicKey)
+	keys := make(map[string]rsa.PublicKey)
 	bc.permanentMappings.Range(func(originRaw, pubKeyRaw interface{}) bool {
 		keys[originRaw.(string)] = pubKeyRaw.(rsa.PublicKey)
 		return true

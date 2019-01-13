@@ -669,7 +669,7 @@ func (g *Gossiper) getOwnedChunks(metaFile []byte) []uint64 {
 	chunkMap := make([]uint64, 0)
 	for i := 1; i < len(metaFile)/sha256.Size+1; i++ {
 		var hashSlice [32]byte
-		copy(hashSlice[:], metaFile[(i-1)*sha256.Size : i*sha256.Size])
+		copy(hashSlice[:], metaFile[(i-1)*sha256.Size:i*sha256.Size])
 		_, err := g.data.getLocalData(hashSlice)
 		if err == nil {
 			chunkMap = append(chunkMap, uint64(i))
@@ -794,7 +794,7 @@ func (g *Gossiper) downloadFile(user string, hash [32]byte, filename string, key
 			// get every chunk
 			for i := 0; i < len(metafile); i += sha256.Size {
 				chunkNr := uint64(i/sha256.Size + 1)
-				copy(packet.DataRequest.HashValue[:], metafile[i : i+sha256.Size])
+				copy(packet.DataRequest.HashValue[:], metafile[i:i+sha256.Size])
 				hashSlice := append([]byte(nil), packet.DataRequest.HashValue[:]...)
 				chunckHex := hex.EncodeToString(hashSlice)
 				g.waitData.Store(chunckHex, &replyChan)

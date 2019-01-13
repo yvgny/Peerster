@@ -131,7 +131,7 @@ func (g *Gossiper) DownloadFileFromCloud(filename string, blockchain *Blockchain
 	}
 	request.Sign(g.keychain.AsymmetricPrivKey, request.Nonce)
 
-	common.BroadcastMessage(g.peers.Elements(), &common.GossipPacket{UploadedFileRequest:request}, nil, g.gossipConn)
+	common.BroadcastMessage(g.peers.Elements(), &common.GossipPacket{UploadedFileRequest: request}, nil, g.gossipConn)
 
 	channel := make(chan *common.UploadedFileReply)
 	g.waitCloudRequest.Store(fileInfo.MetaHash, channel)
