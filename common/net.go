@@ -49,7 +49,7 @@ type FileIndexPacket struct {
 
 type FileDownloadPacket struct {
 	User      string
-	HashValue []byte
+	HashValue [32]byte
 	Filename  string
 }
 
@@ -61,14 +61,14 @@ type DataRequest struct {
 	Origin      string
 	Destination string
 	HopLimit    uint32
-	HashValue   []byte
+	HashValue   [32]byte
 }
 
 type DataReply struct {
 	Origin      string
 	Destination string
 	HopLimit    uint32
-	HashValue   []byte
+	HashValue   [32]byte
 	Data        []byte
 }
 
@@ -141,7 +141,7 @@ type ClientPacket struct {
 	CloudPacket  *CloudPacket
 }
 
-type Signature []byte
+type Signature [256]byte
 
 type IdentityPKeyMapping struct {
 	Identity  string
@@ -167,7 +167,7 @@ type FileUploadMessage struct {
 	HopLimit       uint32
 	UploadedChunks []uint64
 	Nonce          [32]byte
-	// TODO add signature ?
+	Signature      Signature
 }
 
 type FileUploadAck struct {
@@ -180,10 +180,10 @@ type FileUploadAck struct {
 }
 
 type UploadedFileRequest struct {
-	Origin   string
-	MetaHash [32]byte
-	Nonce    [32]byte
-	// TODO add signature ?
+	Origin    string
+	MetaHash  [32]byte
+	Nonce     [32]byte
+	Signature Signature
 }
 
 type UploadedFileReply struct {
@@ -219,7 +219,7 @@ func (t *TxPublish) Hash() (out [32]byte) {
 	if t.Mapping != nil {
 		h.Write([]byte(t.Mapping.Identity))
 		h.Write(t.Mapping.PublicKey)
-		h.Write(t.Mapping.Signature)
+		h.Write(t.Mapping.Signature[:])
 	}
 	copy(out[:], h.Sum(nil))
 	return
@@ -232,15 +232,15 @@ func (f *File) Clone() *File {
 	return clone
 }
 
-func (s *Signature) Clone() *Signature {
-	var clone Signature
-	clone = make([]byte, len(*s))
-	copy(clone, *s)
-	return &clone
-}
+//func (s *Signature) Clone() *Signature {
+//	var clone Signature
+//	clone = make([]byte, len(*s))
+//	copy(clone, *s)
+//	return &clone
+//}
 
 func (id *IdentityPKeyMapping) Clone() *IdentityPKeyMapping {
-	clone := &IdentityPKeyMapping{Identity: id.Identity, Signature: *id.Signature.Clone()}
+	clone := &IdentityPKeyMapping{Identity: id.Identity, Signature: id.Signature}
 	clone.PublicKey = make([]byte, len(id.PublicKey))
 	copy(clone.PublicKey, id.PublicKey)
 	return clone
@@ -271,7 +271,7 @@ func (rm *RumorMessage) Clone() *RumorMessage {
 		Origin:    rm.Origin,
 		Text:      rm.Text,
 		ID:        rm.ID,
-		Signature: *rm.Signature.Clone(),
+		Signature: rm.Signature,
 	}
 }
 
@@ -303,6 +303,20 @@ func (id *IdentityPKeyMapping) Hash() (out [32]byte) {
 }
 
 // The nonce from UploadedFileRequest should be given
+func (fum *FileUploadMessage) Hash(nonce [32]byte) (out [32]byte) {
+	h := sha256.New()
+	h.Write([]byte(fum.Origin))
+	h.Write(fum.MetaFile)
+	for _, chunk := range fum.UploadedChunks {
+		_ = binary.Write(h, binary.LittleEndian, chunk)
+	}
+	h.Write(fum.MetaHash[:])
+	h.Write(nonce[:])
+	copy(out[:], h.Sum(nil))
+	return
+}
+
+// The nonce from UploadedFileRequest should be given
 func (ufr *UploadedFileReply) Hash(nonce [32]byte) (out [32]byte) {
 	h := sha256.New()
 	h.Write([]byte(ufr.Origin))
@@ -318,11 +332,21 @@ func (ufr *UploadedFileReply) Hash(nonce [32]byte) (out [32]byte) {
 
 // The nonce from FileUploadMessage should be given. chunksHash is the
 // hash of the concatenation of the chunks selected in UploadedChunks
-func (fua *FileUploadAck) Hash(chunksHash []byte, nonce [32]byte) (out [32]byte) {
+func (fua *FileUploadAck) Hash(chunksHash [sha256.Size]byte, nonce [32]byte) (out [32]byte) {
 	h := sha256.New()
 	h.Write([]byte(fua.Origin))
 	h.Write([]byte(fua.Destination))
-	h.Write(chunksHash)
+	h.Write(chunksHash[:])
+	h.Write(nonce[:])
+	copy(out[:], h.Sum(nil))
+	return
+}
+
+// The nonce from UploadedFileRequest should be given
+func (ufr *UploadedFileRequest) Hash(nonce [32]byte) (out [32]byte) {
+	h := sha256.New()
+	h.Write([]byte(ufr.Origin))
+	h.Write(ufr.MetaHash[:])
 	h.Write(nonce[:])
 	copy(out[:], h.Sum(nil))
 	return

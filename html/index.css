@@ -20,3 +20,13 @@
 #modal-alert .modal-content {
     width: auto;
 }
+
+#cloud-files-list li {
+    justify-content: space-between;
+    align-items: center;
+    display: flex;
+}
+
+#cloud-files-list .cloud-download-loading {
+    display: none;
+}

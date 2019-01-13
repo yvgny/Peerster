@@ -9,7 +9,7 @@ import (
 	"hash"
 	"io"
 	"io/ioutil"
-	"math/rand"
+	"math"
 	"os"
 	"path"
 	"path/filepath"
@@ -78,7 +78,7 @@ func (dm *DataManager) addChunkLocation(metafileHash, filename string, chunkNumb
 	}
 }
 
-func (dm *DataManager) getRandomChunkLocation(metafileHash string, chunkNumber uint64) (string, bool) {
+func (dm *DataManager) getChunkLocation(metafileHash string, chunkNumber uint64) (string, bool) {
 	dm.RLock()
 	defer dm.RUnlock()
 
@@ -92,7 +92,44 @@ func (dm *DataManager) getRandomChunkLocation(metafileHash string, chunkNumber u
 		return "", false
 	}
 
-	return list[rand.Intn(len(list))], true
+	if len(list) == 0 {
+		return "", false
+	}
+
+	return list[0], true
+}
+
+func (dm *DataManager) getChunkLocationsCount(metafileHash string, chunkNumber uint64) (int, bool) {
+	dm.RLock()
+	defer dm.RUnlock()
+
+	remoteFile, ok := dm.remoteFiles[metafileHash]
+	if !ok {
+		return 0, false
+	}
+
+	list, ok := remoteFile.ChunkLocations[chunkNumber]
+	if !ok {
+		return 0, false
+	}
+
+	return len(list), true
+}
+
+func (dm *DataManager) rotateChunkLocationsWithFirstPeer(peer string) {
+	dm.Lock()
+	defer dm.Unlock()
+
+	for _, remoteFile := range dm.remoteFiles {
+		for key, list := range remoteFile.ChunkLocations {
+			if len(list) == 0 {
+				continue
+			} else if list[0] == peer {
+				newList := append(list, list[0])
+				remoteFile.ChunkLocations[key] = newList[1:]
+			}
+		}
+	}
 }
 
 // return every matched file, mapping the filename to their metafile hash
@@ -112,22 +149,40 @@ func (dm *DataManager) getAllRemoteMatches() map[string]string {
 }
 
 func (dm *DataManager) remoteFileIsMatch(metafileHash string) bool {
+	return dm.numberOfMatch(metafileHash) > 0
+}
+
+func (dm *DataManager) numberOfMatch(metafileHash string) uint {
 	dm.RLock()
 	defer dm.RUnlock()
-
 	remoteFile, ok := dm.remoteFiles[metafileHash]
 	if !ok {
-		return false
+		return 0
 	}
-	return remoteFile.ChunkCount == uint64(len(remoteFile.ChunkLocations))
+
+	if remoteFile.ChunkCount != uint64(len(remoteFile.ChunkLocations)) {
+		return 0
+	}
+
+	var min uint = math.MaxInt32
+	for _, locations := range remoteFile.ChunkLocations {
+		length := uint(len(locations))
+		if length < min {
+			min = length
+		}
+	}
+
+	return min
 }
 
 func (dm *DataManager) removeLocalFile(metafileHash string) error {
-	hash, err := hex.DecodeString(metafileHash)
+	metahashSlice, err := hex.DecodeString(metafileHash)
 	if err != nil {
 		return err
 	}
-	metafile, err := dm.getLocalData(hash)
+	var metahash [32]byte
+	copy(metahash[:], metahashSlice)
+	metafile, err := dm.getLocalData(metahash)
 	if err != nil {
 		return err
 	}
@@ -141,6 +196,8 @@ func (dm *DataManager) removeLocalFile(metafileHash string) error {
 		chunkHex := hex.EncodeToString(metahash)
 		_ = os.Remove(filepath.Join(DataCacheFolder, chunkHex))
 	}
+
+	_ = os.Remove(filepath.Join(DataCacheFolder, metafileHash))
 
 	dm.localFiles.Delete(metafileHash)
 
@@ -208,9 +265,9 @@ func (dm *DataManager) addLocalFile(path string, key *[32]byte) (*LocalFile, err
 	return lf, nil
 }
 
-func (dm *DataManager) addLocalData(data, hash []byte) error {
-	hashBytes := sha256.Sum256(data)
-	hash1 := hex.EncodeToString(hash)
+func (dm *DataManager) addLocalData(data []byte, hash [32]byte) error {
+	hashBytes := sha256.Sum256(data[:])
+	hash1 := hex.EncodeToString(hash[:])
 	hash2 := hex.EncodeToString(hashBytes[:])
 
 	if hash1 != hash2 {
@@ -248,8 +305,8 @@ func (dm *DataManager) getLocalRecord(hash string) (*LocalFile, error) {
 	return &md, nil
 }
 
-func (dm *DataManager) getLocalData(hash []byte) ([]byte, error) {
-	hashStr := hex.EncodeToString(hash)
+func (dm *DataManager) getLocalData(hash [32]byte) ([]byte, error) {
+	hashStr := hex.EncodeToString(hash[:])
 	rawData, err := ioutil.ReadFile(filepath.Join(DataCacheFolder, hashStr))
 	if err != nil {
 		return nil, err
@@ -258,21 +315,24 @@ func (dm *DataManager) getLocalData(hash []byte) ([]byte, error) {
 	return rawData, nil
 }
 
-func (dm *DataManager) HashChunksOfLocalFile(metafileHash []byte, chunkMap []uint64, hashWriter hash.Hash) ([]byte, error) {
+func (dm *DataManager) HashChunksOfLocalFile(metafileHash [32]byte, chunkMap []uint64, hashWriter hash.Hash) ([sha256.Size]byte, error) {
 	metafile, err := dm.getLocalData(metafileHash)
+	var chunksHash [sha256.Size]byte
 	if err != nil {
-		return nil, err
+		return chunksHash, err
 	}
 	for _, chunkNum := range chunkMap {
-		currHash := metafile[(chunkNum-1)*sha256.Size : chunkNum*sha256.Size]
+		var currHash [32]byte
+		copy(currHash[:], metafile[(chunkNum-1)*sha256.Size:chunkNum*sha256.Size])
 		data, err := dm.getLocalData(currHash)
 		if err != nil {
-			return nil, err
+			return chunksHash, err
 		}
 		hashWriter.Write(data)
 	}
-
-	return hashWriter.Sum(nil), nil
+	sum := hashWriter.Sum(nil)
+	copy(chunksHash[:], sum)
+	return chunksHash, nil
 }
 
 func (dm *DataManager) SearchLocalFile(keywords []string) []*common.SearchResult {

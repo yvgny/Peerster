@@ -281,7 +281,9 @@ func (g *Gossiper) postFileToDownload(writer http.ResponseWriter, request *http.
 		fmt.Println(err.Error())
 	}
 
-	err = g.downloadFile(user, hash, filename, nil)
+	var hashArray [32]byte
+	copy(hashArray[:], hash)
+	err = g.downloadFile(user, hashArray, filename, nil)
 	if err != nil {
 		writeErrorToHTTP(writer, err)
 		fmt.Println(err.Error())
