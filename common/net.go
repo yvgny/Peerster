@@ -296,13 +296,12 @@ func (id *IdentityPKeyMapping) Hash() (out [32]byte) {
 }
 
 // The nonce from UploadedFileRequest should be given
+// We do not include the UploadedChunks array in the hash as it can
+// be modified by the hops
 func (fum *FileUploadMessage) Hash(nonce [32]byte) (out [32]byte) {
 	h := sha256.New()
 	h.Write([]byte(fum.Origin))
 	h.Write(fum.MetaFile)
-	for _, chunk := range fum.UploadedChunks {
-		_ = binary.Write(h, binary.LittleEndian, chunk)
-	}
 	h.Write(fum.MetaHash[:])
 	h.Write(nonce[:])
 	copy(out[:], h.Sum(nil))
